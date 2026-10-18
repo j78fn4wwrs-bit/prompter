@@ -1,0 +1,42 @@
+name: Prompter
+options:
+  bundleIdPrefix: com.mikejohnson
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  xcodeVersion: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+targets:
+  Prompter:
+    type: application
+    platform: iOS
+    sources:
+      - path: Prompter
+      - path: Products.storekit
+        buildPhase: none
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mikejohnson.prompter
+        PRODUCT_NAME: Prompter
+        INFOPLIST_FILE: Prompter/App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+schemes:
+  Prompter:
+    build:
+      targets:
+        Prompter: all
+    run:
+      config: Debug
+      storeKitConfiguration: Products.storekit
