@@ -5,6 +5,8 @@ import UIKit
 
 struct ScriptListView: View {
     @Environment(\.modelContext) private var context
+    @EnvironmentObject private var store: ProStore
+    @State private var restoreMessage: String?
     @Query(sort: \Script.updatedAt, order: .reverse) private var scripts: [Script]
     @AppStorage(PrefKey.seeded) private var seeded = false
 
@@ -43,6 +45,22 @@ struct ScriptListView: View {
                 ScriptEditorView(script: script)
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        if store.isPro {
+                            Label("Pro Unlocked", systemImage: "checkmark.seal.fill")
+                        }
+                        Button {
+                            Task { await restorePurchases() }
+                        } label: {
+                            Label("Restore Purchase", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(store.isBusy)
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button { newScript(text: "") } label: {
@@ -70,8 +88,21 @@ struct ScriptListView: View {
             } message: {
                 Text(importError ?? "")
             }
+            .alert("Restore Purchase", isPresented: Binding(get: { restoreMessage != nil },
+                                                            set: { if !$0 { restoreMessage = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(restoreMessage ?? "")
+            }
             .onAppear(perform: seedIfNeeded)
         }
+    }
+
+    private func restorePurchases() async {
+        store.errorMessage = nil
+        await store.restore()
+        restoreMessage = store.isPro ? "Prompter Pro is restored." : (store.errorMessage ?? "No previous purchase found.")
+        store.errorMessage = nil
     }
 
     private func seedIfNeeded() {
