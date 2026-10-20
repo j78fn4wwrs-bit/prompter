@@ -3,9 +3,11 @@ import SwiftData
 
 struct ScriptEditorView: View {
     @Bindable var script: Script
+    /// Creates new scripts from dropped files (handled by the script list).
+    var onFileDrop: ([NSItemProvider]) -> Void = { _ in }
     @EnvironmentObject private var store: ProStore
     @State private var showPrompter = false
-    @State private var showPaywall = false
+    @State private var paywallFeature: ProFeature?
     @AppStorage(PrefKey.speed) private var speed: Double = 60
 
     var body: some View {
@@ -16,9 +18,13 @@ struct ScriptEditorView: View {
                 .padding(.top, 8)
             HStack {
                 Text("\(script.wordCount) words")
+                let chapters = ScriptOutline.lines(script.text).filter { $0.headingLevel > 0 }.count
+                if chapters > 0 {
+                    Text("· \(chapters) chapter\(chapters == 1 ? "" : "s")")
+                }
                 Spacer()
                 Button {
-                    if !store.isPro { showPaywall = true }
+                    if !store.isPro { paywallFeature = .readTime }
                 } label: {
                     if store.isPro {
                         Label("~\(script.readTime()) read", systemImage: "clock")
@@ -33,8 +39,7 @@ struct ScriptEditorView: View {
             .padding(.horizontal)
             .padding(.vertical, 6)
             Divider()
-            TextEditor(text: $script.text)
-                .font(.body)
+            ScriptTextView(text: $script.text, onFileDrop: onFileDrop)
                 .padding(.horizontal, 12)
         }
         .frame(maxWidth: 820)
@@ -53,11 +58,16 @@ struct ScriptEditorView: View {
         .onChange(of: script.text) { _, _ in script.updatedAt = Date() }
         .onChange(of: script.title) { _, _ in script.updatedAt = Date() }
         .fullScreenCover(isPresented: $showPrompter) {
-            PrompterView(text: script.text)
+            PrompterView(script: script)
                 .environmentObject(store)
         }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView().environmentObject(store)
+        .sheet(item: $paywallFeature) { feature in
+            PaywallView(feature: feature).environmentObject(store)
+        }
+        .onDrop(of: DropImporter.acceptedTypes, isTargeted: nil) { providers in
+            guard DropImporter.hasImportableFile(providers) else { return false }
+            onFileDrop(providers)
+            return true
         }
     }
 }

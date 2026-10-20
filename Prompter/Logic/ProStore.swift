@@ -7,7 +7,20 @@ import Combine
 final class ProStore: ObservableObject {
     static let proID = "com.mikejohnson.prompter.pro"
 
-    @Published private(set) var isPro: Bool = false
+    /// Real StoreKit entitlement.
+    @Published private(set) var purchasedPro: Bool = false
+    /// DEBUG builds only: lets Mike test Pro screens in the simulator without buying.
+    @Published var debugUnlock: Bool = UserDefaults.standard.bool(forKey: "debugUnlockPro") {
+        didSet { UserDefaults.standard.set(debugUnlock, forKey: "debugUnlockPro") }
+    }
+
+    var isPro: Bool {
+        #if DEBUG
+        return purchasedPro || debugUnlock
+        #else
+        return purchasedPro
+        #endif
+    }
     @Published private(set) var product: Product?
     @Published var isBusy: Bool = false
     @Published var errorMessage: String?
@@ -47,7 +60,7 @@ final class ProStore: ObservableObject {
                 owned = true
             }
         }
-        isPro = owned
+        purchasedPro = owned
     }
 
     func purchase() async {
@@ -82,8 +95,34 @@ final class ProStore: ObservableObject {
             errorMessage = "Restore failed: \(error.localizedDescription)"
         }
         await refreshEntitlements()
-        if !isPro && errorMessage == nil {
+        if !purchasedPro && errorMessage == nil {
             errorMessage = "No previous Pro purchase found for this Apple Account."
+        }
+    }
+}
+
+/// Which Pro feature opened the paywall, so the sheet can say why.
+enum ProFeature: String, Identifiable {
+    case camera, colors, keyboard, readTime, general
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .camera: return "video.fill"
+        case .colors: return "paintpalette.fill"
+        case .keyboard: return "keyboard"
+        case .readTime: return "clock.fill"
+        case .general: return "star.fill"
+        }
+    }
+
+    var headline: String {
+        switch self {
+        case .camera: return "Record yourself with the camera is a Pro feature"
+        case .colors: return "Custom colors are Pro"
+        case .keyboard: return "Keyboard and clicker control is Pro"
+        case .readTime: return "Read-time estimates are Pro"
+        case .general: return "Steady Prompter Pro"
         }
     }
 }

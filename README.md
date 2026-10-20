@@ -4,8 +4,8 @@ User-facing name: **Steady Prompter**. The Xcode target/project stay `Prompter` 
 
 An honest teleprompter for iPhone. SwiftUI + SwiftData, iOS 18+. No accounts, no analytics, no backend.
 
-- **Free:** unlimited scripts (write, paste, import .txt), smooth auto-scroll, speed + font size, mirror, tap to play/pause, 3-2-1 countdown, reading line, screen stays awake.
-- **Pro ($9.99 one-time, `com.mikejohnson.prompter.pro`):** front-camera recording saved to Photos, keyboard/clicker control, custom colors, read time.
+- **Free:** unlimited scripts (write, paste, import or drag in text/RTF/PDF/Word/Pages), smooth auto-scroll, speed + font size, mirror, basic color presets, # chapters and markers with a jump list, tap to play/pause, 3-2-1 countdown, reading line, screen stays awake.
+- **Pro ($9.99 one-time, `com.mikejohnson.prompter.pro`):** front-camera recording saved to Photos, keyboard/clicker control (shortcuts for speed, size, markers), any custom colors, read time. Debug builds have an "Unlock Pro for testing" switch in the gear menu.
 
 ## Run it on your iPhone (Mike)
 

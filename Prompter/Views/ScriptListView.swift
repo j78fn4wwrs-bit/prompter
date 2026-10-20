@@ -41,6 +41,24 @@ struct ScriptListView: View {
                     }
                 }
             }
+            .background {
+                // Hardware keyboard: ⌘V makes a new script from the clipboard when no script is open
+                // (so it never steals paste from the editor); ⌘⇧V works any time.
+                Group {
+                    Button("New Script from Clipboard") { pasteScript() }
+                        .keyboardShortcut("v", modifiers: .command)
+                        .disabled(selection != nil)
+                    Button("New Script from Clipboard ") { pasteScript() }
+                        .keyboardShortcut("v", modifiers: [.command, .shift])
+                }
+                .opacity(0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+            // Drop files on the script list / sidebar to create new scripts.
+            .onDrop(of: DropImporter.acceptedTypes, isTargeted: nil) { providers in
+                handleDrop(providers)
+            }
             .navigationTitle("Steady Prompter")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -54,6 +72,11 @@ struct ScriptListView: View {
                             Label("Restore Purchase", systemImage: "arrow.clockwise")
                         }
                         .disabled(store.isBusy)
+                        #if DEBUG
+                        Toggle(isOn: $store.debugUnlock) {
+                            Label("Unlock Pro for testing", systemImage: "hammer")
+                        }
+                        #endif
                     } label: {
                         Image(systemName: "gearshape")
                     }
@@ -79,13 +102,18 @@ struct ScriptListView: View {
             .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 420)
         } detail: {
             if let selection {
-                ScriptEditorView(script: selection)
+                ScriptEditorView(script: selection, onFileDrop: { providers in _ = handleDrop(providers) })
                     .id(selection.persistentModelID)
             } else {
                 ContentUnavailableView {
                     Label("Pick a script", systemImage: "text.alignleft")
                 } description: {
-                    Text("Choose a script on the left, or tap + to write a new one.")
+                    Text("Choose a script on the left, tap + to write a new one, or drop a file here.")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onDrop(of: DropImporter.acceptedTypes, isTargeted: nil) { providers in
+                    handleDrop(providers)
                 }
             }
         }
@@ -148,8 +176,8 @@ struct ScriptListView: View {
     }
 
     private func pasteScript() {
-        guard let text = UIPasteboard.general.string, !text.isEmpty else {
-            pasteError = "The clipboard doesn't have any text. Copy your script first, then try again."
+        guard let text = ClipboardReader.text() else {
+            pasteError = "The clipboard doesn't have any text. Copy your script first, then try again. In the Simulator, turn on Edit > Automatically Sync Pasteboard so your Mac's clipboard reaches the app."
             return
         }
         newScript(text: text, title: firstLineTitle(text))
@@ -168,6 +196,21 @@ struct ScriptListView: View {
         case .failure:
             importError = "Couldn't open that file."
         }
+    }
+
+    /// Creates one new script per dropped file. Never touches the open script.
+    @discardableResult
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard DropImporter.hasImportableFile(providers) else { return false }
+        DropImporter.importProviders(providers) { result in
+            switch result {
+            case .success(let imported):
+                newScript(text: imported.body, title: imported.title)
+            case .failure(let error):
+                importError = (error as? LocalizedError)?.errorDescription ?? "Couldn't read that file."
+            }
+        }
+        return true
     }
 
     private func firstLineTitle(_ text: String) -> String {

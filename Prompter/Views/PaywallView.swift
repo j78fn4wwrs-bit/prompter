@@ -4,6 +4,8 @@ import StoreKit
 struct PaywallView: View {
     @EnvironmentObject private var store: ProStore
     @Environment(\.dismiss) private var dismiss
+    /// The feature the user tapped, so the sheet explains why it opened.
+    var feature: ProFeature = .general
 
     static let privacyURL = URL(string: "https://github.com/j78fn4wwrs-bit/prompter/blob/main/PRIVACY.md")!
     static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
@@ -12,14 +14,28 @@ struct PaywallView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Steady Prompter Pro")
-                        .font(.largeTitle.bold())
+                    HStack(spacing: 14) {
+                        Image(systemName: feature.icon)
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(.tint)
+                            .frame(width: 56, height: 56)
+                            .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 14))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(feature.headline)
+                                .font(.title2.bold())
+                            if feature != .general {
+                                Text("Part of Steady Prompter Pro")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                     Text("One payment. Yours forever. No subscription, no account.")
                         .foregroundStyle(.secondary)
-                    feature("video.fill", "Record yourself with the front camera while your script scrolls, saved to Photos")
-                    feature("keyboard", "Control with a Bluetooth keyboard or clicker: space to play/pause, arrows to move")
-                    feature("paintpalette.fill", "Custom text and background colors")
-                    feature("clock.fill", "Estimated read time for every script")
+                    featureRow("video.fill", "Record yourself with the front camera while your script scrolls, saved to Photos")
+                    featureRow("keyboard", "Keyboard and clicker control: space to play/pause, arrows for speed and markers, ⌘+/⌘− for text size")
+                    featureRow("paintpalette.fill", "Any custom text and background color (the basic presets are free)")
+                    featureRow("clock.fill", "Estimated read time for every script")
 
                     if store.isPro {
                         Label("Pro is unlocked. Thank you!", systemImage: "checkmark.seal.fill")
@@ -43,6 +59,11 @@ struct PaywallView: View {
                         .frame(maxWidth: .infinity)
                         .disabled(store.isBusy)
                     }
+
+                    #if DEBUG
+                    Toggle("Unlock Pro for testing (debug builds only)", isOn: $store.debugUnlock)
+                        .font(.footnote)
+                    #endif
 
                     if let message = store.errorMessage {
                         Text(message).font(.footnote).foregroundStyle(.red)
@@ -70,7 +91,7 @@ struct PaywallView: View {
         }
     }
 
-    private func feature(_ icon: String, _ text: String) -> some View {
+    private func featureRow(_ icon: String, _ text: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon).frame(width: 28).foregroundStyle(.tint)
             Text(text)

@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 struct PrompterView: View {
-    let text: String
+    let script: Script
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: ProStore
@@ -10,7 +10,7 @@ struct PrompterView: View {
     @StateObject private var camera = CameraRecorder()
 
     @AppStorage(PrefKey.speed) private var speed: Double = 60
-    @AppStorage(PrefKey.fontSize) private var fontSize: Double = 40
+    @AppStorage(PrefKey.fontSize) private var fontSize: Double = 44
     @AppStorage(PrefKey.mirror) private var mirror: Bool = false
     @AppStorage(PrefKey.textHex) private var textHex: String = "#FFFFFF"
     @AppStorage(PrefKey.backgroundHex) private var backgroundHex: String = "#000000"
@@ -18,19 +18,41 @@ struct PrompterView: View {
     @State private var countdown: Int?
     @State private var countdownTask: Task<Void, Never>?
     @State private var contentHeight: CGFloat = 0
+    @State private var lineTops: [Int: CGFloat] = [:]
     @State private var dragStartOffset: CGFloat?
     @State private var showControls = true
-    @State private var showPaywall = false
+    @State private var paywallFeature: ProFeature?
     @State private var showColors = false
+    @State private var showChapters = false
+    @State private var showHelp = false
     @State private var cameraMode = false
+    @State private var hud: String?
+    @State private var hudTask: Task<Void, Never>?
+    @State private var viewWidth: CGFloat = 400
     @FocusState private var keyboardFocused: Bool
-    /// Grows text and the reading line on iPad, shrinks a bit in Slide Over / narrow Split View.
+    /// Only used for the reading-line arrow, not for text size.
     @State private var layoutScale: CGFloat = 1
 
-    private var scaledFont: CGFloat { CGFloat(fontSize) * layoutScale }
+    // MARK: Text size
+    //
+    // Old bug: the slider value (20–100) was multiplied by a width-based scale (up to 2.2× on iPad),
+    // so the real size reached ~220 pt and the whole script was drawn as ONE giant Text. Past
+    // roughly 60% of the slider that single text layer got taller than the GPU's maximum texture
+    // size, so iOS drew it downsampled (looked smaller) and then not at all (blank screen).
+    // Now: the slider value IS the point size, with a per-device range, and the script is drawn
+    // line by line so no single layer gets huge.
+
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    private var fontRange: ClosedRange<Double> {
+        let base: ClosedRange<Double> = isPad ? 24...120 : 20...80
+        // Keep ~6+ average characters per line even in Slide Over / narrow windows.
+        let widthCap = max(base.lowerBound, Double(textWidth) / 6)
+        return base.lowerBound...min(base.upperBound, widthCap)
+    }
+    private var scaledFont: CGFloat { CGFloat(min(max(fontSize, fontRange.lowerBound), fontRange.upperBound)) }
+    private var textWidth: CGFloat { max(100, viewWidth - max(horizontalPadding, viewWidth * 0.08) * 2) }
 
     static func scale(for size: CGSize) -> CGFloat {
-        // 430 pt ≈ largest iPhone width. iPad full screen ≈ 1.8–2.2×, Slide Over ≈ 0.75–0.85×.
         min(max(size.width / 430, 0.75), 2.2)
     }
 
@@ -38,8 +60,24 @@ struct PrompterView: View {
     private let readingLineFraction: CGFloat = 0.33
     private let horizontalPadding: CGFloat = 24
 
-    private var textColor: Color { store.isPro ? Color(hex: textHex) : .white }
-    private var backgroundColor: Color { store.isPro ? Color(hex: backgroundHex) : .black }
+    static let freeColorPresets: [(name: String, text: String, background: String)] = [
+        ("White on Black", "#FFFFFF", "#000000"),
+        ("Black on White", "#000000", "#FFFFFF"),
+        ("Yellow on Black", "#FFD60A", "#000000"),
+    ]
+    private var usingFreePreset: Bool {
+        Self.freeColorPresets.contains { $0.text == textHex.uppercased() && $0.background == backgroundHex.uppercased() }
+    }
+    private var textColor: Color { (store.isPro || usingFreePreset) ? Color(hex: textHex) : .white }
+    private var backgroundColor: Color { (store.isPro || usingFreePreset) ? Color(hex: backgroundHex) : .black }
+
+    private var lines: [ScriptLine] { ScriptOutline.lines(script.text) }
+    private var markers: [Int] { script.markerOffsets ?? [] }
+    private var markedLineIndices: Set<Int> {
+        let ls = lines
+        return Set(markers.map { ScriptOutline.lineIndex(for: $0, in: ls) })
+    }
+    private var jumpPoints: [JumpPoint] { ScriptOutline.jumpPoints(lines: lines, markers: markers) }
 
     var body: some View {
         GeometryReader { geo in
@@ -65,46 +103,68 @@ struct PrompterView: View {
                 if showControls && !engine.isPlaying && countdown == nil {
                     controls
                 }
+                if let hud {
+                    hudView(hud)
+                }
             }
             .onAppear {
                 layoutScale = Self.scale(for: geo.size)
-                updateMax(height: geo.size.height, lineY: lineY)
+                viewWidth = geo.size.width
+                updateMax()
             }
-            .onChange(of: contentHeight) { _, _ in updateMax(height: geo.size.height, lineY: lineY) }
+            .onChange(of: contentHeight) { _, _ in updateMax() }
             .onChange(of: geo.size) { _, newSize in
                 layoutScale = Self.scale(for: newSize)
-                updateMax(height: newSize.height, lineY: newSize.height * readingLineFraction)
+                viewWidth = newSize.width
+                updateMax()
             }
         }
         .ignoresSafeArea()
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
+        .background { commandShortcuts }
         .focusable()
         .focused($keyboardFocused)
         .focusEffectDisabled()
-        .onKeyPress { press in handleKey(press) }
+        .onKeyPress(phases: .down) { press in handleKey(press) }
         .onAppear {
             engine.speed = speed
+            if fontSize < fontRange.lowerBound || fontSize > fontRange.upperBound {
+                fontSize = min(max(fontSize, fontRange.lowerBound), fontRange.upperBound)
+            }
             keyboardFocused = true
         }
         .onChange(of: speed) { _, newValue in engine.speed = newValue }
+        .onChange(of: fontSize) { oldValue, newValue in
+            // Keep roughly the same place in the script when the size changes.
+            if oldValue > 0 { engine.offset *= CGFloat(newValue / oldValue) }
+        }
         .onChange(of: engine.isPlaying) { _, playing in
             if !playing && camera.isRecording { camera.stopRecording() }
         }
         .onDisappear {
             countdownTask?.cancel()
-            engine.pause()
+            hudTask?.cancel()
+            engine.reset()
             camera.stopSession()
         }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView().environmentObject(store)
+        .sheet(item: $paywallFeature, onDismiss: { keyboardFocused = true }) { feature in
+            PaywallView(feature: feature).environmentObject(store)
         }
-        .sheet(isPresented: $showColors) {
+        .sheet(isPresented: $showColors, onDismiss: { keyboardFocused = true }) {
             colorSheet
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showChapters, onDismiss: { keyboardFocused = true }) {
+            chaptersSheet
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showHelp, onDismiss: { keyboardFocused = true }) {
+            helpSheet
         }
         .animation(.easeInOut(duration: 0.2), value: countdown)
         .animation(.easeInOut(duration: 0.2), value: engine.isPlaying)
+        .animation(.easeInOut(duration: 0.2), value: hud)
     }
 
     // MARK: Layers
@@ -122,23 +182,53 @@ struct PrompterView: View {
     }
 
     private func scriptLayer(size: CGSize, lineY: CGFloat) -> some View {
-        Text(text)
-            .font(.system(size: scaledFont, weight: .semibold))
-            .foregroundStyle(textColor)
+        let marked = markedLineIndices
+        return VStack(alignment: .leading, spacing: scaledFont * 0.25) {
+            ForEach(lines) { line in
+                lineView(line, marked: marked.contains(line.id))
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.frame(in: .named("script")).minY
+                    } action: { y in
+                        lineTops[line.id] = y
+                    }
+            }
+        }
+        .frame(width: textWidth, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .coordinateSpace(name: "script")
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { newHeight in
+            contentHeight = newHeight
+        }
+        .padding(.top, lineY)
+        .offset(y: -engine.offset)
+        .frame(width: size.width, height: size.height, alignment: .top)
+        .clipped()
+        .scaleEffect(x: mirror ? -1 : 1, y: 1)
+    }
+
+    @ViewBuilder
+    private func lineView(_ line: ScriptLine, marked: Bool) -> some View {
+        let isHeading = line.headingLevel > 0
+        let size = isHeading ? scaledFont * (line.headingLevel == 1 ? 1.15 : 1.05) : scaledFont
+        Text(line.text.isEmpty ? " " : line.text)
+            .font(.system(size: size, weight: isHeading ? .heavy : .semibold))
+            .foregroundStyle(isHeading ? Color.orange : textColor)
             .lineSpacing(scaledFont * 0.25)
             .multilineTextAlignment(.leading)
-            .frame(width: max(0, size.width - max(horizontalPadding, size.width * 0.08) * 2), alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                contentHeight = newHeight
+            .overlay(alignment: .leading) {
+                if marked {
+                    // Subtle marker bar just left of the text.
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.orange.opacity(0.8))
+                        .frame(width: 4)
+                        .padding(.vertical, 2)
+                        .offset(x: -12)
+                }
             }
-            .padding(.top, lineY)
-            .offset(y: -engine.offset)
-            .frame(width: size.width, height: size.height, alignment: .top)
-            .clipped()
-            .scaleEffect(x: mirror ? -1 : 1, y: 1)
     }
 
     private func readingLine(y: CGFloat, width: CGFloat) -> some View {
@@ -155,16 +245,45 @@ struct PrompterView: View {
         .allowsHitTesting(false)
     }
 
+    private func hudView(_ message: String) -> some View {
+        VStack {
+            Text(message)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.7), in: Capsule())
+                .padding(.top, 60)
+            Spacer()
+        }
+        .transition(.opacity)
+        .allowsHitTesting(false)
+    }
+
     private var controls: some View {
         VStack {
-            HStack {
+            HStack(spacing: 4) {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark").padding(10)
                 }
+                .accessibilityLabel("Close")
                 Spacer()
-                Button { engine.reset() } label: {
+                Button { showHelp = true } label: {
+                    Image(systemName: "keyboard").padding(10)
+                }
+                .accessibilityLabel("Keyboard shortcuts")
+                Button { showChapters = true } label: {
+                    Image(systemName: "list.bullet").padding(10)
+                }
+                .accessibilityLabel("Chapters and markers")
+                Button { addMarker() } label: {
+                    Image(systemName: "bookmark").padding(10)
+                }
+                .accessibilityLabel("Add marker here")
+                Button { engine.reset(); flash("Top") } label: {
                     Image(systemName: "backward.end.fill").padding(10)
                 }
+                .accessibilityLabel("Back to top")
             }
             .font(.title3.bold())
             .foregroundStyle(.white)
@@ -190,7 +309,8 @@ struct PrompterView: View {
                 }
                 HStack {
                     Image(systemName: "textformat.size.smaller")
-                    Slider(value: $fontSize, in: 20...100)
+                    // Left = smaller, right = bigger. The value is the point size.
+                    Slider(value: fontBinding, in: fontRange)
                     Image(systemName: "textformat.size.larger")
                 }
                 HStack(spacing: 22) {
@@ -198,14 +318,18 @@ struct PrompterView: View {
                         Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
                     }
                     .toggleStyle(.button)
+                    .accessibilityLabel("Mirror")
 
-                    proButton(icon: cameraMode ? "video.fill" : "video", active: cameraMode) {
+                    proButton(icon: cameraMode ? "video.fill" : "video", active: cameraMode, feature: .camera) {
                         cameraMode.toggle()
                         if cameraMode { camera.prepare() } else { camera.stopSession() }
                     }
-                    proButton(icon: "paintpalette", active: false) {
-                        showColors = true
+                    .accessibilityLabel("Camera")
+                    // Colors: basic presets are free, custom colors are Pro (inside the sheet).
+                    Button { showColors = true } label: {
+                        Image(systemName: "paintpalette")
                     }
+                    .accessibilityLabel("Colors")
 
                     Spacer()
 
@@ -216,7 +340,7 @@ struct PrompterView: View {
                     }
                 }
                 .font(.title2)
-                Text("Tap anywhere to start or pause. Drag to move.")
+                Text("Tap anywhere to start or pause. Drag to move. ⌘/ for keyboard shortcuts.")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.7))
             }
@@ -231,9 +355,13 @@ struct PrompterView: View {
         }
     }
 
-    private func proButton(icon: String, active: Bool, action: @escaping () -> Void) -> some View {
+    private var fontBinding: Binding<Double> {
+        Binding(get: { Double(scaledFont) }, set: { fontSize = $0 })
+    }
+
+    private func proButton(icon: String, active: Bool, feature: ProFeature, action: @escaping () -> Void) -> some View {
         Button {
-            if store.isPro { action() } else { showPaywall = true }
+            if store.isPro { action() } else { paywallFeature = feature }
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: icon)
@@ -250,30 +378,170 @@ struct PrompterView: View {
     private var colorSheet: some View {
         NavigationStack {
             Form {
-                ColorPicker("Text", selection: Binding(
-                    get: { Color(hex: textHex) },
-                    set: { textHex = $0.hexString() }
-                ), supportsOpacity: false)
-                ColorPicker("Background", selection: Binding(
-                    get: { Color(hex: backgroundHex) },
-                    set: { backgroundHex = $0.hexString() }
-                ), supportsOpacity: false)
-                Button("Reset to white on black") {
-                    textHex = "#FFFFFF"
-                    backgroundHex = "#000000"
+                Section("Presets (free)") {
+                    ForEach(Self.freeColorPresets, id: \.name) { preset in
+                        Button {
+                            textHex = preset.text
+                            backgroundHex = preset.background
+                        } label: {
+                            HStack {
+                                Text("Aa")
+                                    .font(.headline)
+                                    .foregroundStyle(Color(hex: preset.text))
+                                    .frame(width: 44, height: 30)
+                                    .background(Color(hex: preset.background), in: RoundedRectangle(cornerRadius: 6))
+                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.gray.opacity(0.4)))
+                                Text(preset.name).foregroundStyle(.primary)
+                                Spacer()
+                                if textHex.uppercased() == preset.text && backgroundHex.uppercased() == preset.background {
+                                    Image(systemName: "checkmark").foregroundStyle(.tint)
+                                }
+                            }
+                        }
+                    }
+                }
+                Section("Custom (Pro)") {
+                    if store.isPro {
+                        ColorPicker("Text", selection: Binding(
+                            get: { Color(hex: textHex) },
+                            set: { textHex = $0.hexString() }
+                        ), supportsOpacity: false)
+                        ColorPicker("Background", selection: Binding(
+                            get: { Color(hex: backgroundHex) },
+                            set: { backgroundHex = $0.hexString() }
+                        ), supportsOpacity: false)
+                    } else {
+                        Button {
+                            showColors = false
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { paywallFeature = .colors }
+                        } label: {
+                            Label("Pick any text and background color", systemImage: "lock.fill")
+                        }
+                    }
                 }
             }
             .navigationTitle("Colors")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { showColors = false } }
+            }
         }
+    }
+
+    private var chaptersSheet: some View {
+        NavigationStack {
+            List {
+                if jumpPoints.isEmpty {
+                    Text("No chapters yet. Start a line with # or ## in the editor, or press M (or the bookmark button) while prompting to add a marker.")
+                        .foregroundStyle(.secondary)
+                }
+                Button { jumpToTop(); showChapters = false } label: {
+                    Label("Top", systemImage: "arrow.up.to.line")
+                }
+                ForEach(Array(jumpPoints.enumerated()), id: \.element.id) { index, point in
+                    Button {
+                        jump(toLine: point.lineIndex, label: point.title)
+                        showChapters = false
+                    } label: {
+                        HStack {
+                            Image(systemName: point.kind == .heading ? "text.book.closed" : "bookmark.fill")
+                                .foregroundStyle(.orange)
+                            Text(point.title).foregroundStyle(.primary).lineLimit(2)
+                            Spacer()
+                            if index < 9 {
+                                Text("\(index + 1)").font(.caption.monospaced()).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .swipeActions {
+                        if point.kind == .marker {
+                            Button(role: .destructive) { removeMarker(point) } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Chapters & Markers")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { showChapters = false } }
+            }
+        }
+    }
+
+    private var helpSheet: some View {
+        NavigationStack {
+            List {
+                Section("While prompting (hardware keyboard)") {
+                    shortcutRow("Space", "Play / pause")
+                    shortcutRow("↑ / ↓", "Speed up / slow down")
+                    shortcutRow("⌘+ (or ⌘=) / ⌘−", "Bigger / smaller text")
+                    shortcutRow("M", "Add a marker at the reading line")
+                    shortcutRow("← / → or [ / ]", "Previous / next chapter or marker")
+                    shortcutRow("1 – 9", "Jump to chapter or marker N")
+                    shortcutRow("Home or ⌘↑", "Back to top")
+                    shortcutRow("Page Up / Page Down", "Nudge back / forward (clickers)")
+                    shortcutRow("Esc", "Exit the prompter")
+                    shortcutRow("⌘/", "This help")
+                }
+                Section {
+                    Text("Hold ⌘ on an iPad keyboard to see the shortcut list. Keyboard control is part of Pro.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Keyboard Shortcuts")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { showHelp = false } }
+            }
+        }
+    }
+
+    private func shortcutRow(_ keys: String, _ action: String) -> some View {
+        HStack {
+            Text(keys).font(.body.monospaced().bold())
+            Spacer()
+            Text(action).foregroundStyle(.secondary)
+        }
+    }
+
+    /// ⌘ shortcuts as hidden buttons, so they appear in iPad's hold-⌘ discoverability overlay.
+    /// Plain keys (space, arrows, M, numbers) go through onKeyPress below.
+    private var commandShortcuts: some View {
+        Group {
+            Button("Bigger Text") { keyCommand { changeFont(by: 4) } }
+                .keyboardShortcut("+", modifiers: .command)
+            Button("Bigger Text ") { keyCommand { changeFont(by: 4) } }
+                .keyboardShortcut("=", modifiers: .command)
+            Button("Smaller Text") { keyCommand { changeFont(by: -4) } }
+                .keyboardShortcut("-", modifiers: .command)
+            Button("Back to Top") { keyCommand { jumpToTop() } }
+                .keyboardShortcut(.upArrow, modifiers: .command)
+            Button("Keyboard Shortcuts") { showHelp = true }
+                .keyboardShortcut("/", modifiers: .command)
+        }
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     // MARK: Behaviour
 
-    private func updateMax(height: CGFloat, lineY: CGFloat) {
+    private func updateMax() {
         // Stop when the last line reaches the reading line.
         engine.maxOffset = max(0, contentHeight - scaledFont)
         if engine.offset > engine.maxOffset { engine.offset = engine.maxOffset }
+    }
+
+    private func flash(_ message: String) {
+        hudTask?.cancel()
+        hud = message
+        hudTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            if !Task.isCancelled { hud = nil }
+        }
     }
 
     private func togglePlay() {
@@ -309,6 +577,81 @@ struct PrompterView: View {
         }
     }
 
+    private func changeSpeed(by delta: Double) {
+        speed = min(max(speed + delta, 10), 300)
+        flash(String(format: "Speed %.1f", speed / 20))
+    }
+
+    private func changeFont(by delta: Double) {
+        let r = fontRange
+        fontSize = min(max(Double(scaledFont) + delta, r.lowerBound), r.upperBound)
+        flash("Text \(Int(fontSize)) pt")
+    }
+
+    /// Line whose top is at or above the reading line right now.
+    private var currentLineIndex: Int {
+        var best = 0
+        for (index, top) in lineTops where top <= engine.offset + 1 {
+            if top >= (lineTops[best] ?? 0) { best = index }
+        }
+        return best
+    }
+
+    private func addMarker() {
+        let ls = lines
+        let idx = currentLineIndex
+        guard ls.indices.contains(idx) else { return }
+        let offset = ls[idx].startOffset
+        var current = script.markerOffsets ?? []
+        if current.contains(offset) {
+            flash("Marker already here")
+            return
+        }
+        current.append(offset)
+        current.sort()
+        script.markerOffsets = current
+        let number = (current.firstIndex(of: offset) ?? 0) + 1
+        flash("Marker \(number) added")
+    }
+
+    private func removeMarker(_ point: JumpPoint) {
+        guard point.kind == .marker, let offset = Int(point.id.dropFirst()) else { return }
+        script.markerOffsets = (script.markerOffsets ?? []).filter { $0 != offset }
+    }
+
+    private func jump(toLine index: Int, label: String) {
+        guard let top = lineTops[index] else { return }
+        engine.jump(to: top)
+        flash(label)
+    }
+
+    private func jumpToTop() {
+        engine.jump(to: 0)
+        flash("Top")
+    }
+
+    private func jumpRelative(_ direction: Int) {
+        let points = jumpPoints
+        guard !points.isEmpty else { flash("No chapters or markers"); return }
+        let here = engine.offset
+        let tops = points.map { lineTops[$0.lineIndex] ?? 0 }
+        if direction > 0 {
+            if let i = tops.firstIndex(where: { $0 > here + 2 }) {
+                jump(toLine: points[i].lineIndex, label: points[i].title)
+            } else { flash("Last chapter") }
+        } else {
+            if let i = tops.lastIndex(where: { $0 < here - 2 }) {
+                jump(toLine: points[i].lineIndex, label: points[i].title)
+            } else { jumpToTop() }
+        }
+    }
+
+    private func jumpToPoint(number n: Int) {
+        let points = jumpPoints
+        guard n >= 1, n <= points.count else { flash("No marker \(n)"); return }
+        jump(toLine: points[n - 1].lineIndex, label: "\(n). \(points[n - 1].title)")
+    }
+
     private var scrubGesture: some Gesture {
         DragGesture(minimumDistance: 12)
             .onChanged { value in
@@ -323,26 +666,61 @@ struct PrompterView: View {
             }
     }
 
-    /// Hardware keyboard / Bluetooth clicker (Pro). Most clickers send arrows or page up/down.
+    /// Runs a keyboard action if Pro (keyboard control is a Pro feature), otherwise explains.
+    private func keyCommand(_ action: () -> Void) {
+        if store.isPro {
+            action()
+        } else {
+            flash("Keyboard control is a Pro feature")
+        }
+    }
+
+    /// Plain-key hardware keyboard / Bluetooth clicker handling.
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
-        guard store.isPro else { return .ignored }
-        let step = scaledFont * 3
-        if press.key == .space || press.key == .return {
-            togglePlay()
-            return .handled
-        }
-        if press.key == .downArrow || press.key == .rightArrow || press.key == .pageDown {
-            engine.nudge(by: step)
-            return .handled
-        }
-        if press.key == .upArrow || press.key == .leftArrow || press.key == .pageUp {
-            engine.nudge(by: -step)
-            return .handled
-        }
+        // ⌘ combos are handled by the hidden shortcut buttons.
+        if press.modifiers.contains(.command) { return .ignored }
         if press.key == .escape {
             dismiss()
             return .handled
         }
-        return .ignored
+        if press.characters == "?" {
+            showHelp = true
+            return .handled
+        }
+        var handled = true
+        let step = scaledFont * 3
+        let chars = press.characters.lowercased()
+        let action: (() -> Void)?
+        switch press.key {
+        case .space, .return: action = { togglePlay() }
+        case .upArrow: action = { changeSpeed(by: 10) }
+        case .downArrow: action = { changeSpeed(by: -10) }
+        case .leftArrow: action = { jumpRelative(-1) }
+        case .rightArrow: action = { jumpRelative(1) }
+        case .pageDown: action = { engine.nudge(by: step) }
+        case .pageUp: action = { engine.nudge(by: -step) }
+        case .home: action = { jumpToTop() }
+        default:
+            if chars == "m" {
+                action = { addMarker() }
+            } else if chars == "[" {
+                action = { jumpRelative(-1) }
+            } else if chars == "]" {
+                action = { jumpRelative(1) }
+            } else if chars.count == 1, let n = Int(chars), (1...9).contains(n) {
+                action = { jumpToPoint(number: n) }
+            } else if chars == "+" || chars == "=" {
+                action = { changeFont(by: 4) }
+            } else if chars == "-" {
+                action = { changeFont(by: -4) }
+            } else {
+                action = nil
+                handled = false
+            }
+        }
+        guard handled, let action else { return .ignored }
+        // Key presses arrive on the main thread; hop explicitly to satisfy actor checking.
+        DispatchQueue.main.async { keyCommand(action) }
+        return .handled
     }
 }
