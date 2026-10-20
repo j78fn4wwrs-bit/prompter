@@ -49,5 +49,6 @@ Tap + > **Import File**. The title should be the file name; errors show in an al
 29. [ ] **Real iPad/iPhone, Mac drive**: put scripts in iCloud Drive or a shared folder from the Mac (Files > Browse > Locations, or Connect to Server), pick one, imports.
 30. [ ] **Real iPad, USB drive / SD card**: plug it in, picker > Browse > Locations > the drive name, pick a .txt, .pdf and .docx. All import; unplugging afterwards doesn't affect the imported script.
 31. [ ] Third-party providers (Dropbox, Google Drive app) under Locations: pick a file, imports.
+32. [ ] **iPad + menu, portrait and landscape**: with something on the clipboard, tap + > Import File. The Files picker opens (no new script, no clipboard alert). Cancel. Rotate, collapse/show the sidebar, repeat. Then + > Paste from Clipboard creates a script; with an empty clipboard it shows "Nothing to Paste" (never titled Import).
 
 **Simulator note:** the iOS Simulator's file picker can't see your Mac's drives. That's Apple's limit, not the app's. To test there, drag a file from Finder onto the Simulator window (it lands in Files) and then import it. To test real drives, use the iPhone/iPad: Files > Locations > USB drive.

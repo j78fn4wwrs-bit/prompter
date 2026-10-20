@@ -13,6 +13,7 @@ struct ScriptListView: View {
     @State private var selection: Script?
     @State private var showImporter = false
     @State private var importError: String?
+    @State private var pasteError: String?
 
     var body: some View {
         NavigationSplitView {
@@ -66,30 +67,13 @@ struct ScriptListView: View {
                         Button { pasteScript() } label: {
                             Label("Paste from Clipboard", systemImage: "doc.on.clipboard")
                         }
-                        Button { showImporter = true } label: {
+                        Button { presentImporter() } label: {
                             Label("Import File (Text, PDF, Word, Pages)", systemImage: "doc.text")
                         }
                     } label: {
                         Image(systemName: "plus")
                     }
                 }
-            }
-            .fileImporter(isPresented: $showImporter,
-                          allowedContentTypes: ScriptImporter.allowedContentTypes,
-                          allowsMultipleSelection: false) { result in
-                handleImport(result)
-            }
-            .alert("Import", isPresented: Binding(get: { importError != nil },
-                                                  set: { if !$0 { importError = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(importError ?? "")
-            }
-            .alert("Restore Purchase", isPresented: Binding(get: { restoreMessage != nil },
-                                                            set: { if !$0 { restoreMessage = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(restoreMessage ?? "")
             }
             .onAppear(perform: seedIfNeeded)
             .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 420)
@@ -106,6 +90,40 @@ struct ScriptListView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        // Presentation modifiers live on the split view itself (one stable container), not on the
+        // sidebar column. On iPad the sidebar can be collapsed/hidden (portrait), and modifiers
+        // attached to a hidden column never present - that's why Import did nothing.
+        .fileImporter(isPresented: $showImporter,
+                      allowedContentTypes: ScriptImporter.allowedContentTypes,
+                      allowsMultipleSelection: false) { result in
+            handleImport(result)
+        }
+        .alert("Couldn't Import File", isPresented: Binding(get: { importError != nil },
+                                                            set: { if !$0 { importError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importError ?? "")
+        }
+        .alert("Nothing to Paste", isPresented: Binding(get: { pasteError != nil },
+                                                        set: { if !$0 { pasteError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(pasteError ?? "")
+        }
+        .alert("Restore Purchase", isPresented: Binding(get: { restoreMessage != nil },
+                                                        set: { if !$0 { restoreMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(restoreMessage ?? "")
+        }
+    }
+
+    /// Opens the Files picker after the + menu has finished dismissing; presenting while the
+    /// menu is still animating out can be silently dropped on iPad.
+    private func presentImporter() {
+        importError = nil
+        pasteError = nil
+        DispatchQueue.main.async { showImporter = true }
     }
 
     private func restorePurchases() async {
@@ -131,7 +149,7 @@ struct ScriptListView: View {
 
     private func pasteScript() {
         guard let text = UIPasteboard.general.string, !text.isEmpty else {
-            importError = "The clipboard doesn't have any text."
+            pasteError = "The clipboard doesn't have any text. Copy your script first, then try again."
             return
         }
         newScript(text: text, title: firstLineTitle(text))
