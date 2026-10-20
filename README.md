@@ -1,4 +1,6 @@
-# Prompter (placeholder name)
+# Steady Prompter
+
+User-facing name: **Steady Prompter**. The Xcode target/project stay `Prompter` and the bundle ID stays `com.mikejohnson.prompter`, so the build commands are unchanged.
 
 An honest teleprompter for iPhone. SwiftUI + SwiftData, iOS 18+. No accounts, no analytics, no backend.
 

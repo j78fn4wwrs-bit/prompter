@@ -1,4 +1,4 @@
-# Prompter: iPhone test checklist
+# Steady Prompter: iPhone test checklist
 
 Build: `cd ~/prompter && git pull && xcodegen`, then Cmd+R on your iPhone.
 

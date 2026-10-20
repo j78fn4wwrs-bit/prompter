@@ -1,6 +1,6 @@
-# Prompter Privacy Policy
+# Steady Prompter Privacy Policy
 
-Prompter does not collect, store, or share any personal data.
+Steady Prompter does not collect, store, or share any personal data.
 
 - No accounts, no analytics, no ads, no tracking, no servers.
 - Your scripts are stored only on your device.

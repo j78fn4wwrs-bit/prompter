@@ -9,12 +9,12 @@
       "localizations" : [
         {
           "description" : "Camera recording, clicker and keyboard control, custom colors and read time.",
-          "displayName" : "Prompter Pro",
+          "displayName" : "Steady Prompter Pro",
           "locale" : "en_US"
         }
       ],
       "productID" : "com.mikejohnson.prompter.pro",
-      "referenceName" : "Prompter Pro",
+      "referenceName" : "Steady Prompter Pro",
       "type" : "NonConsumable"
     }
   ],

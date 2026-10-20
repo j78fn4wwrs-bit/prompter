@@ -12,7 +12,7 @@ struct PaywallView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Prompter Pro")
+                    Text("Steady Prompter Pro")
                         .font(.largeTitle.bold())
                     Text("One payment. Yours forever. No subscription, no account.")
                         .foregroundStyle(.secondary)

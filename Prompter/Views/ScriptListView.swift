@@ -40,7 +40,7 @@ struct ScriptListView: View {
                     }
                 }
             }
-            .navigationTitle("Prompter")
+            .navigationTitle("Steady Prompter")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
@@ -111,7 +111,7 @@ struct ScriptListView: View {
     private func restorePurchases() async {
         store.errorMessage = nil
         await store.restore()
-        restoreMessage = store.isPro ? "Prompter Pro is restored." : (store.errorMessage ?? "No previous purchase found.")
+        restoreMessage = store.isPro ? "Steady Prompter Pro is restored." : (store.errorMessage ?? "No previous purchase found.")
         store.errorMessage = nil
     }
 

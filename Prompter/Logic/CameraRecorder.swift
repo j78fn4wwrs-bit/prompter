@@ -53,7 +53,7 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
         }
         if let raw = reasonValue, let reason = AVCaptureSession.InterruptionReason(rawValue: raw),
            reason == .videoDeviceNotAvailableWithMultipleForegroundApps {
-            statusMessage = "The camera pauses in Split View or Slide Over on this iPad. Make Prompter full screen to record."
+            statusMessage = "The camera pauses in Split View or Slide Over on this iPad. Make Steady Prompter full screen to record."
         } else {
             statusMessage = "The camera is paused by iOS. Recording will resume when it's available."
         }
@@ -88,7 +88,7 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
             let videoOK = await AVCaptureDevice.requestAccess(for: .video)
             let audioOK = await AVCaptureDevice.requestAccess(for: .audio)
             guard videoOK else {
-                self.statusMessage = "Camera access is off. Turn it on in Settings > Prompter."
+                self.statusMessage = "Camera access is off. Turn it on in Settings > Steady Prompter."
                 return
             }
             if !audioOK {
