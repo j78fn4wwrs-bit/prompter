@@ -172,6 +172,7 @@ struct PrompterView: View {
             .padding(.top, 50)
 
             Spacer()
+                .allowsHitTesting(false)
 
             if let message = camera.statusMessage {
                 Text(message)
