@@ -18,8 +18,12 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
     private var videoDevice: AVCaptureDevice?
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
-    private var rotationObservation: NSKeyValueObservation?
+    private var rotationObservations: [NSKeyValueObservation] = []
     private var interruptionObservers: [NSObjectProtocol] = []
+    /// Latest upright angle for the movie file. Read on the main queue.
+    private var captureAngle: CGFloat?
+    /// The coordinator only measures a preview that is already in a window.
+    private var previewInWindow = false
 
     /// True while iOS has paused the camera (e.g. Split View / Slide Over on iPads
     /// without multitasking camera access, or another app took the camera).
@@ -37,22 +41,23 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
             guard let self else { return }
             self.isInterrupted = false
             self.statusMessage = nil
+            if let angle = self.rotationCoordinator?.videoRotationAngleForHorizonLevelPreview {
+                self.applyPreviewAngle(angle)
+            }
         })
     }
 
     deinit {
         interruptionObservers.forEach { NotificationCenter.default.removeObserver($0) }
-        rotationObservation?.invalidate()
+        rotationObservations.forEach { $0.invalidate() }
     }
 
     private func handleInterruption(_ note: Notification) {
         isInterrupted = true
-        var reasonValue: Int?
-        if let number = note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber {
-            reasonValue = number.intValue
-        }
-        if let raw = reasonValue, let reason = AVCaptureSession.InterruptionReason(rawValue: raw),
-           reason == .videoDeviceNotAvailableWithMultipleForegroundApps {
+        // userInfo stores an NSNumber. intValue is Int32; InterruptionReason.RawValue is Int.
+        let reason = (note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber)
+            .flatMap { AVCaptureSession.InterruptionReason(rawValue: $0.integerValue) }
+        if reason == .videoDeviceNotAvailableWithMultipleForegroundApps {
             statusMessage = "The camera pauses in Split View or Slide Over on this iPad. Make Steady Prompter full screen to record."
         } else {
             statusMessage = "The camera is paused by iOS. Recording will resume when it's available."
@@ -60,27 +65,55 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
         if isRecording { stopRecording() }
     }
 
-    /// Called by the preview view once its layer exists.
+    /// Called once the preview layer is installed in a window. A coordinator created
+    /// before that never reports a preview angle, so the preview stays sideways.
     func attachPreview(_ layer: AVCaptureVideoPreviewLayer) {
+        if previewLayer !== layer {
+            rotationObservations.forEach { $0.invalidate() }
+            rotationObservations.removeAll()
+            rotationCoordinator = nil
+        }
         previewLayer = layer
+        previewInWindow = true
         setupRotation()
     }
 
     /// iOS 17+ rotation handling: keeps the preview level and records upright video
     /// in every iPad/iPhone orientation (including landscape front cameras on iPad).
+    /// Both angles are KVO-compliant and the callbacks arrive on the main queue.
     private func setupRotation() {
-        guard rotationCoordinator == nil, let device = videoDevice, let layer = previewLayer else { return }
-        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: layer)
-        rotationCoordinator = coordinator
-        rotationObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview,
-                                                  options: [.initial, .new]) { [weak layer] coord, _ in
-            let angle = coord.videoRotationAngleForHorizonLevelPreview
-            DispatchQueue.main.async {
-                if let connection = layer?.connection, connection.isVideoRotationAngleSupported(angle) {
-                    connection.videoRotationAngle = angle
+        guard previewInWindow, let device = videoDevice, let layer = previewLayer else { return }
+        if rotationCoordinator == nil {
+            let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: layer)
+            rotationCoordinator = coordinator
+            rotationObservations.append(
+                coordinator.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.new]) { [weak self] coord, _ in
+                    self?.applyPreviewAngle(coord.videoRotationAngleForHorizonLevelPreview)
                 }
+            )
+            rotationObservations.append(
+                coordinator.observe(\.videoRotationAngleForHorizonLevelCapture, options: [.new]) { [weak self] coord, _ in
+                    self?.captureAngle = coord.videoRotationAngleForHorizonLevelCapture
+                }
+            )
+        }
+        guard let coordinator = rotationCoordinator else { return }
+        // KVO reports later changes only. Apply the current angles or the preview
+        // stays sideways until the device rotates.
+        applyPreviewAngle(coordinator.videoRotationAngleForHorizonLevelPreview)
+        captureAngle = coordinator.videoRotationAngleForHorizonLevelCapture
+        if previewLayer?.connection == nil {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let coordinator = self.rotationCoordinator else { return }
+                self.applyPreviewAngle(coordinator.videoRotationAngleForHorizonLevelPreview)
             }
         }
+    }
+
+    private func applyPreviewAngle(_ angle: CGFloat) {
+        guard let connection = previewLayer?.connection,
+              connection.isVideoRotationAngleSupported(angle) else { return }
+        connection.videoRotationAngle = angle
     }
 
     func prepare() {
@@ -150,7 +183,7 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
 
     func startRecording() {
         guard !isInterrupted else { return }
-        let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture
+        let angle = captureAngle ?? rotationCoordinator?.videoRotationAngleForHorizonLevelCapture
         sessionQueue.async { [weak self] in
             guard let self, self.configured, !self.movieOutput.isRecording else { return }
             if let angle, let connection = self.movieOutput.connection(with: .video),
@@ -228,6 +261,14 @@ struct CameraPreview: UIViewRepresentable {
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+        var onMovedToWindow: ((AVCaptureVideoPreviewLayer) -> Void)?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            // The layer has no position in the interface until it joins a window.
+            guard window != nil else { return }
+            onMovedToWindow?(previewLayer)
+        }
     }
 
     func makeUIView(context: Context) -> PreviewView {
@@ -235,9 +276,13 @@ struct CameraPreview: UIViewRepresentable {
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
         view.backgroundColor = .black
-        onLayerReady?(view.previewLayer)
+        view.onMovedToWindow = onLayerReady
         return view
     }
 
-    func updateUIView(_ uiView: PreviewView, context: Context) {}
+    func updateUIView(_ uiView: PreviewView, context: Context) {
+        // The prompter redraws every scroll frame. didMoveToWindow reports the layer;
+        // don't attach again from here or the preview angle is rewritten every frame.
+        uiView.onMovedToWindow = onLayerReady
+    }
 }

@@ -5,6 +5,9 @@ options:
     iOS: "18.0"
   createIntermediateGroups: true
   xcodeVersion: "26.0"
+  # Schemes live in Prompter.xcodeproj/xcshareddata/xcschemes, so this
+  # prefix resolves Products.storekit at the project root.
+  schemePathPrefix: "../../"
 settings:
   base:
     SWIFT_VERSION: "5.0"
@@ -20,6 +23,9 @@ targets:
     platform: iOS
     sources:
       - path: Prompter
+        excludes:
+          # INFOPLIST_FILE is compiled on its own. Copying it again fails the build.
+          - App/Info.plist
       - path: Products.storekit
         buildPhase: none
     settings:

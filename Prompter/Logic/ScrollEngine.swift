@@ -23,14 +23,22 @@ final class ScrollEngine: NSObject, ObservableObject {
         newLink.add(to: .main, forMode: .common)
         link = newLink
         isPlaying = true
-        UIApplication.shared.isIdleTimerDisabled = true
+        setIdleTimerDisabled(true)
     }
 
     func pause() {
         link?.invalidate()
         link = nil
         isPlaying = false
-        UIApplication.shared.isIdleTimerDisabled = false
+        setIdleTimerDisabled(false)
+    }
+
+    /// UIApplication is main-actor isolated. The display link runs on the main
+    /// thread, but that callback is not a MainActor job, so hop explicitly.
+    private func setIdleTimerDisabled(_ disabled: Bool) {
+        Task { @MainActor in
+            UIApplication.shared.isIdleTimerDisabled = disabled
+        }
     }
 
     func reset() {

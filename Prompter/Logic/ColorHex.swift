@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 extension Color {
     init(hex: String) {
@@ -14,12 +13,13 @@ extension Color {
     }
 
     func hexString() -> String {
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
-        let ri = Int(max(0, min(1, r)) * 255)
-        let gi = Int(max(0, min(1, g)) * 255)
-        let bi = Int(max(0, min(1, b)) * 255)
-        return String(format: "#%02X%02X%02X", ri, gi, bi)
+        // ColorPicker colors are often Display P3. UIColor.getRed returns false for
+        // those and would store black. Resolved components are sRGB.
+        let resolved = resolve(in: EnvironmentValues())
+        func channel(_ value: Float) -> Int {
+            Int((min(max(value, 0), 1) * 255).rounded())
+        }
+        return String(format: "#%02X%02X%02X", channel(resolved.red), channel(resolved.green), channel(resolved.blue))
     }
 }
 
