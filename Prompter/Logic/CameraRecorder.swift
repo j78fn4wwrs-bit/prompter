@@ -6,7 +6,9 @@ import UIKit
 import Combine
 
 /// Front-camera video + mic recording, saved to Photos when finished. (Pro)
-final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecordingDelegate {
+/// Thread safety: session/output state is only touched on `sessionQueue`, and
+/// published/UI state only on the main queue, so cross-queue captures are safe.
+final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecordingDelegate, @unchecked Sendable {
     @Published private(set) var isRecording: Bool = false
     @Published private(set) var isReady: Bool = false
     @Published var statusMessage: String?
@@ -54,9 +56,9 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
 
     private func handleInterruption(_ note: Notification) {
         isInterrupted = true
-        // userInfo stores an NSNumber. intValue is Int32; InterruptionReason.RawValue is Int.
-        let reason = (note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber)
-            .flatMap { AVCaptureSession.InterruptionReason(rawValue: $0.integerValue) }
+        // userInfo stores an NSNumber, which bridges to Int (InterruptionReason.RawValue).
+        let reason = (note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int)
+            .flatMap { AVCaptureSession.InterruptionReason(rawValue: $0) }
         if reason == .videoDeviceNotAvailableWithMultipleForegroundApps {
             statusMessage = "The camera pauses in Split View or Slide Over on this iPad. Make Steady Prompter full screen to record."
         } else {
@@ -127,8 +129,9 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
             if !audioOK {
                 self.statusMessage = "Microphone is off, so recordings will be silent."
             }
-            self.sessionQueue.async { [weak self] in
-                self?.configureAndStart(withAudio: audioOK)
+            // The Task already holds self strongly; capture the same way here.
+            self.sessionQueue.async {
+                self.configureAndStart(withAudio: audioOK)
             }
         }
     }
