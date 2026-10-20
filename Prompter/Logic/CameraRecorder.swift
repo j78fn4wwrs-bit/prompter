@@ -98,12 +98,31 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
                     from connections: [AVCaptureConnection],
                     error: Error?) {
         DispatchQueue.main.async { self.isRecording = false }
+        if let error = error as NSError? {
+            let finished = (error.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool) ?? false
+            if !finished {
+                try? FileManager.default.removeItem(at: outputFileURL)
+                DispatchQueue.main.async { self.statusMessage = "Recording failed, so nothing was saved." }
+                return
+            }
+        }
         saveToPhotos(outputFileURL)
+    }
+
+    /// Deletes any leftover recordings from a crash or force-quit.
+    static func purgeLeftoverRecordings() {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory
+        guard let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.lastPathComponent.hasPrefix("prompter-") && file.pathExtension == "mov" {
+            try? fm.removeItem(at: file)
+        }
     }
 
     private func saveToPhotos(_ url: URL) {
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else {
+                try? FileManager.default.removeItem(at: url)
                 DispatchQueue.main.async {
                     self.statusMessage = "Photos access is off, so the video wasn't saved."
                 }

@@ -5,6 +5,10 @@ import SwiftData
 struct PrompterApp: App {
     @StateObject private var store = ProStore()
 
+    init() {
+        CameraRecorder.purgeLeftoverRecordings()
+    }
+
     var body: some Scene {
         WindowGroup {
             ScriptListView()
