@@ -35,3 +35,19 @@ Apple requires 13-inch iPad screenshots (2064 × 2752 portrait or 2752 × 2064 l
 1. Xcode > pick **iPad Pro 13-inch (M4)** simulator > Cmd+R.
 2. Set up each screen (script list + editor, prompter running, mirror on), then **File > Save Screen** (Cmd+S) in the Simulator. Files land on the Desktop at the right size.
 3. Camera doesn't work in the Simulator; take the recording screenshot on a real iPad or skip it.
+
+## Script import (Text, RTF, PDF, Word, Pages)
+Tap + > **Import File**. The title should be the file name; errors show in an alert.
+
+22. [ ] **.txt** (UTF-8): imports exactly. Also try a UTF-16 file (TextEdit > Save > Plain Text, Encoding UTF-16) and a Windows/Notepad file with curly quotes: no garbled characters.
+23. [ ] **.rtf** (TextEdit default format): text imports, formatting dropped.
+24. [ ] **PDF** with real text (e.g. Pages > Export > PDF): all pages import, in order. A scanned/image-only PDF shows the "no selectable text" message.
+25. [ ] **Word .docx**: paragraphs come in on separate lines; tabs and line breaks kept.
+26. [ ] **Old Word .doc**: shows the "save as .docx" message (doesn't crash or import garbage).
+27. [ ] **Pages**: a normal .pages file imports its text (from Pages' built-in preview). If it shows "Export from Pages as PDF, Word, or plain text, then import", that's expected for files saved without a preview.
+28. [ ] **iCloud file not downloaded yet** (cloud icon in Files): picking it downloads and imports it.
+29. [ ] **Real iPad/iPhone, Mac drive**: put scripts in iCloud Drive or a shared folder from the Mac (Files > Browse > Locations, or Connect to Server), pick one, imports.
+30. [ ] **Real iPad, USB drive / SD card**: plug it in, picker > Browse > Locations > the drive name, pick a .txt, .pdf and .docx. All import; unplugging afterwards doesn't affect the imported script.
+31. [ ] Third-party providers (Dropbox, Google Drive app) under Locations: pick a file, imports.
+
+**Simulator note:** the iOS Simulator's file picker can't see your Mac's drives. That's Apple's limit, not the app's. To test there, drag a file from Finder onto the Simulator window (it lands in Files) and then import it. To test real drives, use the iPhone/iPad: Files > Locations > USB drive.

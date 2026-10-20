@@ -18,6 +18,7 @@
 	<dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
 	<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 	<key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+	<key>LSSupportsOpeningDocumentsInPlace</key><false/>
 	<key>NSCameraUsageDescription</key><string>Steady Prompter uses the front camera to record you while you read your script.</string>
 	<key>NSMicrophoneUsageDescription</key><string>Steady Prompter records your voice along with the video while you read your script.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key><string>Steady Prompter saves your finished recordings to your Photos library.</string>

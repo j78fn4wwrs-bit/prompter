@@ -67,7 +67,7 @@ struct ScriptListView: View {
                             Label("Paste from Clipboard", systemImage: "doc.on.clipboard")
                         }
                         Button { showImporter = true } label: {
-                            Label("Import .txt File", systemImage: "doc.text")
+                            Label("Import File (Text, PDF, Word, Pages)", systemImage: "doc.text")
                         }
                     } label: {
                         Image(systemName: "plus")
@@ -75,7 +75,7 @@ struct ScriptListView: View {
                 }
             }
             .fileImporter(isPresented: $showImporter,
-                          allowedContentTypes: [UTType.plainText],
+                          allowedContentTypes: ScriptImporter.allowedContentTypes,
                           allowsMultipleSelection: false) { result in
                 handleImport(result)
             }
@@ -141,14 +141,11 @@ struct ScriptListView: View {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            let accessing = url.startAccessingSecurityScopedResource()
-            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
             do {
-                let data = try Data(contentsOf: url)
-                let text = String(decoding: data, as: UTF8.self)
-                newScript(text: text, title: url.deletingPathExtension().lastPathComponent)
+                let imported = try ScriptImporter.importFile(at: url)
+                newScript(text: imported.body, title: imported.title)
             } catch {
-                importError = "Couldn't read that file."
+                importError = (error as? LocalizedError)?.errorDescription ?? "Couldn't read that file."
             }
         case .failure:
             importError = "Couldn't open that file."
