@@ -15,6 +15,73 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
     private let movieOutput = AVCaptureMovieFileOutput()
     private let sessionQueue = DispatchQueue(label: "prompter.camera.session")
     private var configured = false
+    private var videoDevice: AVCaptureDevice?
+    private weak var previewLayer: AVCaptureVideoPreviewLayer?
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var rotationObservation: NSKeyValueObservation?
+    private var interruptionObservers: [NSObjectProtocol] = []
+
+    /// True while iOS has paused the camera (e.g. Split View / Slide Over on iPads
+    /// without multitasking camera access, or another app took the camera).
+    @Published private(set) var isInterrupted: Bool = false
+
+    override init() {
+        super.init()
+        let center = NotificationCenter.default
+        interruptionObservers.append(center.addObserver(forName: AVCaptureSession.wasInterruptedNotification,
+                                                        object: session, queue: .main) { [weak self] note in
+            self?.handleInterruption(note)
+        })
+        interruptionObservers.append(center.addObserver(forName: AVCaptureSession.interruptionEndedNotification,
+                                                        object: session, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.isInterrupted = false
+            self.statusMessage = nil
+        })
+    }
+
+    deinit {
+        interruptionObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        rotationObservation?.invalidate()
+    }
+
+    private func handleInterruption(_ note: Notification) {
+        isInterrupted = true
+        var reasonValue: Int?
+        if let number = note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber {
+            reasonValue = number.intValue
+        }
+        if let raw = reasonValue, let reason = AVCaptureSession.InterruptionReason(rawValue: raw),
+           reason == .videoDeviceNotAvailableWithMultipleForegroundApps {
+            statusMessage = "The camera pauses in Split View or Slide Over on this iPad. Make Prompter full screen to record."
+        } else {
+            statusMessage = "The camera is paused by iOS. Recording will resume when it's available."
+        }
+        if isRecording { stopRecording() }
+    }
+
+    /// Called by the preview view once its layer exists.
+    func attachPreview(_ layer: AVCaptureVideoPreviewLayer) {
+        previewLayer = layer
+        setupRotation()
+    }
+
+    /// iOS 17+ rotation handling: keeps the preview level and records upright video
+    /// in every iPad/iPhone orientation (including landscape front cameras on iPad).
+    private func setupRotation() {
+        guard rotationCoordinator == nil, let device = videoDevice, let layer = previewLayer else { return }
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: layer)
+        rotationCoordinator = coordinator
+        rotationObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview,
+                                                  options: [.initial, .new]) { [weak layer] coord, _ in
+            let angle = coord.videoRotationAngleForHorizonLevelPreview
+            DispatchQueue.main.async {
+                if let connection = layer?.connection, connection.isVideoRotationAngleSupported(angle) {
+                    connection.videoRotationAngle = angle
+                }
+            }
+        }
+    }
 
     func prepare() {
         Task { @MainActor in
@@ -37,10 +104,14 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
         if !configured {
             session.beginConfiguration()
             session.sessionPreset = .high
+            if session.isMultitaskingCameraAccessSupported {
+                session.isMultitaskingCameraAccessEnabled = true
+            }
             if let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
                let input = try? AVCaptureDeviceInput(device: camera),
                session.canAddInput(input) {
                 session.addInput(input)
+                videoDevice = camera
             }
             if withAudio,
                let mic = AVCaptureDevice.default(for: .audio),
@@ -63,7 +134,10 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
         if !session.isRunning {
             session.startRunning()
         }
-        DispatchQueue.main.async { self.isReady = true }
+        DispatchQueue.main.async {
+            self.isReady = true
+            self.setupRotation()
+        }
     }
 
     func stopSession() {
@@ -75,8 +149,14 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
     }
 
     func startRecording() {
+        guard !isInterrupted else { return }
+        let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture
         sessionQueue.async { [weak self] in
             guard let self, self.configured, !self.movieOutput.isRecording else { return }
+            if let angle, let connection = self.movieOutput.connection(with: .video),
+               connection.isVideoRotationAngleSupported(angle) {
+                connection.videoRotationAngle = angle
+            }
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("prompter-\(UUID().uuidString).mov")
             self.movieOutput.startRecording(to: url, recordingDelegate: self)
@@ -143,6 +223,7 @@ final class CameraRecorder: NSObject, ObservableObject, AVCaptureFileOutputRecor
 /// Live camera preview layer for SwiftUI.
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    var onLayerReady: ((AVCaptureVideoPreviewLayer) -> Void)? = nil
 
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
@@ -154,6 +235,7 @@ struct CameraPreview: UIViewRepresentable {
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
         view.backgroundColor = .black
+        onLayerReady?(view.previewLayer)
         return view
     }
 

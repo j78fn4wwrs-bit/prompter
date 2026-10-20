@@ -10,12 +10,12 @@ struct ScriptListView: View {
     @Query(sort: \Script.updatedAt, order: .reverse) private var scripts: [Script]
     @AppStorage(PrefKey.seeded) private var seeded = false
 
-    @State private var path: [Script] = []
+    @State private var selection: Script?
     @State private var showImporter = false
     @State private var importError: String?
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationSplitView {
             Group {
                 if scripts.isEmpty {
                     ContentUnavailableView {
@@ -24,7 +24,7 @@ struct ScriptListView: View {
                         Text("Tap + to write, paste or import a script.")
                     }
                 } else {
-                    List {
+                    List(selection: $selection) {
                         ForEach(scripts) { script in
                             NavigationLink(value: script) {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -41,9 +41,6 @@ struct ScriptListView: View {
                 }
             }
             .navigationTitle("Prompter")
-            .navigationDestination(for: Script.self) { script in
-                ScriptEditorView(script: script)
-            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
@@ -95,7 +92,20 @@ struct ScriptListView: View {
                 Text(restoreMessage ?? "")
             }
             .onAppear(perform: seedIfNeeded)
+            .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 420)
+        } detail: {
+            if let selection {
+                ScriptEditorView(script: selection)
+                    .id(selection.persistentModelID)
+            } else {
+                ContentUnavailableView {
+                    Label("Pick a script", systemImage: "text.alignleft")
+                } description: {
+                    Text("Choose a script on the left, or tap + to write a new one.")
+                }
+            }
         }
+        .navigationSplitViewStyle(.balanced)
     }
 
     private func restorePurchases() async {
@@ -116,7 +126,7 @@ struct ScriptListView: View {
     private func newScript(text: String, title: String = "") {
         let script = Script(title: title, text: text)
         context.insert(script)
-        path.append(script)
+        selection = script
     }
 
     private func pasteScript() {
@@ -152,6 +162,7 @@ struct ScriptListView: View {
 
     private func delete(at offsets: IndexSet) {
         for index in offsets {
+            if selection == scripts[index] { selection = nil }
             context.delete(scripts[index])
         }
     }

@@ -37,6 +37,8 @@ struct ScriptEditorView: View {
                 .font(.body)
                 .padding(.horizontal, 12)
         }
+        .frame(maxWidth: 820)
+        .frame(maxWidth: .infinity)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

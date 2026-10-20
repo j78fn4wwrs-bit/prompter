@@ -16,3 +16,22 @@ Build: `cd ~/prompter && git pull && xcodegen`, then Cmd+R on your iPhone.
 12. [ ] Airplane mode: everything except purchase still works.
 
 Paste any red Xcode errors back to Nihar.
+
+## iPad checks (universal app)
+Build on the iPad the same way (`git pull && xcodegen`, pick the iPad, Cmd+R).
+
+13. [ ] Script list and editor show side by side (list left, editor right) in landscape; portrait still works. Tap + : the new script opens on the right.
+14. [ ] Rotate through all four orientations (including upside-down): list, editor and prompter all re-lay out.
+15. [ ] Split View and Slide Over: open Safari next to Prompter. Prompter text and the reading line shrink to fit at 1/3, 1/2 and 2/3 widths and grow again full screen.
+16. [ ] Full screen prompter text is clearly bigger than on iPhone at the same slider setting; the controls panel stays a readable width.
+17. [ ] Mirror mode flips the text on iPad.
+18. [ ] Camera (Pro), landscape: the front-camera preview is level (not sideways) in both landscape directions and portrait; the saved video in Photos is upright.
+19. [ ] Camera in Split View: on iPads without multitasking camera access you see "The camera pauses in Split View or Slide Over…" and nothing crashes; going full screen brings the preview back.
+20. [ ] Bluetooth keyboard: space/return = play/pause, arrows and Page Up/Down = jump, Esc = close. A clicker (sends arrows/page keys) does the same.
+21. [ ] Restore: on the iPad, gear menu > Restore Purchase with the same Apple Account unlocks Pro (one purchase covers iPhone and iPad). In Xcode test mode each device has its own test purchases, so this is a real check only with TestFlight/sandbox.
+
+## App Store iPad screenshots (13-inch)
+Apple requires 13-inch iPad screenshots (2064 × 2752 portrait or 2752 × 2064 landscape). Easiest:
+1. Xcode > pick **iPad Pro 13-inch (M4)** simulator > Cmd+R.
+2. Set up each screen (script list + editor, prompter running, mirror on), then **File > Save Screen** (Cmd+S) in the Simulator. Files land on the Desktop at the right size.
+3. Camera doesn't work in the Simulator; take the recording screenshot on a real iPad or skip it.

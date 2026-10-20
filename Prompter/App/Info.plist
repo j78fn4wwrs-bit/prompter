@@ -17,7 +17,7 @@
 	<key>UIApplicationSceneManifest</key>
 	<dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
 	<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
-	<key>UIRequiresFullScreen</key><true/>
+	<key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 	<key>NSCameraUsageDescription</key><string>Prompter uses the front camera to record you while you read your script.</string>
 	<key>NSMicrophoneUsageDescription</key><string>Prompter records your voice along with the video while you read your script.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key><string>Prompter saves your finished recordings to your Photos library.</string>

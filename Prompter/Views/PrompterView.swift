@@ -24,6 +24,15 @@ struct PrompterView: View {
     @State private var showColors = false
     @State private var cameraMode = false
     @FocusState private var keyboardFocused: Bool
+    /// Grows text and the reading line on iPad, shrinks a bit in Slide Over / narrow Split View.
+    @State private var layoutScale: CGFloat = 1
+
+    private var scaledFont: CGFloat { CGFloat(fontSize) * layoutScale }
+
+    static func scale(for size: CGSize) -> CGFloat {
+        // 430 pt ≈ largest iPhone width. iPad full screen ≈ 1.8–2.2×, Slide Over ≈ 0.75–0.85×.
+        min(max(size.width / 430, 0.75), 2.2)
+    }
 
     /// Reading line sits a third of the way down the screen.
     private let readingLineFraction: CGFloat = 0.33
@@ -57,9 +66,13 @@ struct PrompterView: View {
                     controls
                 }
             }
-            .onAppear { updateMax(height: geo.size.height, lineY: lineY) }
+            .onAppear {
+                layoutScale = Self.scale(for: geo.size)
+                updateMax(height: geo.size.height, lineY: lineY)
+            }
             .onChange(of: contentHeight) { _, _ in updateMax(height: geo.size.height, lineY: lineY) }
             .onChange(of: geo.size) { _, newSize in
+                layoutScale = Self.scale(for: newSize)
                 updateMax(height: newSize.height, lineY: newSize.height * readingLineFraction)
             }
         }
@@ -99,7 +112,9 @@ struct PrompterView: View {
     @ViewBuilder
     private var background: some View {
         if cameraMode {
-            CameraPreview(session: camera.session)
+            CameraPreview(session: camera.session, onLayerReady: { layer in
+                camera.attachPreview(layer)
+            })
                 .overlay(Color.black.opacity(0.45))
         } else {
             backgroundColor
@@ -108,11 +123,11 @@ struct PrompterView: View {
 
     private func scriptLayer(size: CGSize, lineY: CGFloat) -> some View {
         Text(text)
-            .font(.system(size: CGFloat(fontSize), weight: .semibold))
+            .font(.system(size: scaledFont, weight: .semibold))
             .foregroundStyle(textColor)
-            .lineSpacing(CGFloat(fontSize) * 0.25)
+            .lineSpacing(scaledFont * 0.25)
             .multilineTextAlignment(.leading)
-            .frame(width: max(0, size.width - horizontalPadding * 2), alignment: .leading)
+            .frame(width: max(0, size.width - max(horizontalPadding, size.width * 0.08) * 2), alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
@@ -129,11 +144,11 @@ struct PrompterView: View {
     private func readingLine(y: CGFloat, width: CGFloat) -> some View {
         HStack(spacing: 0) {
             Image(systemName: "arrowtriangle.right.fill")
-                .font(.system(size: 18))
+                .font(.system(size: 18 * layoutScale))
                 .foregroundStyle(Color.red.opacity(0.85))
             Rectangle()
                 .fill(Color.red.opacity(0.35))
-                .frame(height: 2)
+                .frame(height: max(2, 2 * layoutScale))
         }
         .frame(width: width)
         .position(x: width / 2, y: y)
@@ -207,6 +222,7 @@ struct PrompterView: View {
             .tint(.white)
             .foregroundStyle(.white)
             .padding(16)
+            .frame(maxWidth: 640)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
             .environment(\.colorScheme, .dark)
             .padding(.horizontal, 12)
@@ -255,7 +271,7 @@ struct PrompterView: View {
 
     private func updateMax(height: CGFloat, lineY: CGFloat) {
         // Stop when the last line reaches the reading line.
-        engine.maxOffset = max(0, contentHeight - CGFloat(fontSize))
+        engine.maxOffset = max(0, contentHeight - scaledFont)
         if engine.offset > engine.maxOffset { engine.offset = engine.maxOffset }
     }
 
@@ -285,6 +301,7 @@ struct PrompterView: View {
             countdown = nil
             engine.speed = speed
             engine.play()
+            keyboardFocused = true
             if cameraMode && store.isPro {
                 camera.startRecording()
             }
@@ -308,7 +325,7 @@ struct PrompterView: View {
     /// Hardware keyboard / Bluetooth clicker (Pro). Most clickers send arrows or page up/down.
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
         guard store.isPro else { return .ignored }
-        let step = CGFloat(fontSize) * 3
+        let step = scaledFont * 3
         if press.key == .space || press.key == .return {
             togglePlay()
             return .handled
