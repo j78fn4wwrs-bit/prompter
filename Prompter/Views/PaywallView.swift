@@ -7,8 +7,8 @@ struct PaywallView: View {
     /// The feature the user tapped, so the sheet explains why it opened.
     var feature: ProFeature = .general
 
-    static let privacyURL = URL(string: "https://github.com/j78fn4wwrs-bit/prompter/blob/main/PRIVACY.md")!
-    static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    static let privacyURL = URL(string: "https://j78fn4wwrs-bit.github.io/app-legal/steady-prompter/privacy-policy.html")!
+    static let termsURL = URL(string: "https://j78fn4wwrs-bit.github.io/app-legal/steady-prompter/terms-of-use.html")!
 
     var body: some View {
         NavigationStack {
