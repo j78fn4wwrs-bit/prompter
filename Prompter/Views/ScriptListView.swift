@@ -14,6 +14,7 @@ struct ScriptListView: View {
     @State private var showImporter = false
     @State private var importError: String?
     @State private var pasteError: String?
+    @State private var showRemote = false
 
     var body: some View {
         NavigationSplitView {
@@ -83,6 +84,12 @@ struct ScriptListView: View {
                     .accessibilityLabel("Settings")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button { showRemote = true } label: {
+                        Label("Remote Control", systemImage: "appletvremote.gen4")
+                    }
+                    .accessibilityLabel("Remote Control")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button { newScript(text: "") } label: {
                             Label("New Script", systemImage: "square.and.pencil")
@@ -99,6 +106,9 @@ struct ScriptListView: View {
                 }
             }
             .onAppear(perform: seedIfNeeded)
+            .fullScreenCover(isPresented: $showRemote) {
+                RemoteControlView()
+            }
             .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 420)
         } detail: {
             if let selection {

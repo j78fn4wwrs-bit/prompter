@@ -103,7 +103,7 @@ final class ProStore: ObservableObject {
 
 /// Which Pro feature opened the paywall, so the sheet can say why.
 enum ProFeature: String, Identifiable {
-    case camera, colors, keyboard, readTime, general
+    case camera, colors, keyboard, readTime, remote, general
     var id: String { rawValue }
 
     var icon: String {
@@ -112,6 +112,7 @@ enum ProFeature: String, Identifiable {
         case .colors: return "paintpalette.fill"
         case .keyboard: return "keyboard"
         case .readTime: return "clock.fill"
+        case .remote: return "appletvremote.gen4.fill"
         case .general: return "star.fill"
         }
     }
@@ -122,6 +123,7 @@ enum ProFeature: String, Identifiable {
         case .colors: return "Custom colors are Pro"
         case .keyboard: return "Keyboard and clicker control is Pro"
         case .readTime: return "Read-time estimates are Pro"
+        case .remote: return "Remote control of this prompter is Pro"
         case .general: return "Steady Prompter Pro"
         }
     }
