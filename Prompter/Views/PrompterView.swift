@@ -8,6 +8,8 @@ struct PrompterView: View {
     @EnvironmentObject private var store: ProStore
     @StateObject private var engine = ScrollEngine()
     @StateObject private var camera = CameraRecorder()
+    @StateObject private var remote = RemoteHost()
+    @AppStorage(RemotePrefKey.allowRemote) private var allowRemote: Bool = false
 
     @AppStorage(PrefKey.speed) private var speed: Double = 60
     @AppStorage(PrefKey.fontSize) private var fontSize: Double = 44
@@ -106,6 +108,9 @@ struct PrompterView: View {
                 if let hud {
                     hudView(hud)
                 }
+                if remote.isRunning {
+                    remoteBadge
+                }
             }
             .onAppear {
                 layoutScale = Self.scale(for: geo.size)
@@ -133,6 +138,17 @@ struct PrompterView: View {
                 fontSize = min(max(fontSize, fontRange.lowerBound), fontRange.upperBound)
             }
             keyboardFocused = true
+            if allowRemote && store.isPro { remote.start() }
+        }
+        .onReceive(remote.commands) { command in handleRemote(command) }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            if remote.status == .connected { sendRemoteState() }
+        }
+        .onChange(of: remote.status) { _, newStatus in
+            if newStatus == .connected { sendRemoteState() }
+        }
+        .onChange(of: store.isPro) { _, nowPro in
+            if !nowPro { remote.stop() }
         }
         .onChange(of: speed) { _, newValue in engine.speed = newValue }
         .onChange(of: fontSize) { oldValue, newValue in
@@ -141,12 +157,14 @@ struct PrompterView: View {
         }
         .onChange(of: engine.isPlaying) { _, playing in
             if !playing && camera.isRecording { camera.stopRecording() }
+            sendRemoteState()
         }
         .onDisappear {
             countdownTask?.cancel()
             hudTask?.cancel()
             engine.reset()
             camera.stopSession()
+            remote.stop()
         }
         .sheet(item: $paywallFeature, onDismiss: { keyboardFocused = true }) { feature in
             PaywallView(feature: feature).environmentObject(store)
@@ -325,6 +343,11 @@ struct PrompterView: View {
                         if cameraMode { camera.prepare() } else { camera.stopSession() }
                     }
                     .accessibilityLabel("Camera")
+                    proButton(icon: "appletvremote.gen4", active: remote.isRunning, feature: .remote) {
+                        allowRemote.toggle()
+                        if allowRemote { remote.start() } else { remote.stop() }
+                    }
+                    .accessibilityLabel(remote.isRunning ? "Allow Remote: on" : "Allow Remote: off")
                     // Colors: basic presets are free, custom colors are Pro (inside the sheet).
                     Button { showColors = true } label: {
                         Image(systemName: "paintpalette")
@@ -353,6 +376,31 @@ struct PrompterView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 30)
         }
+    }
+
+    /// Top-left pill: pairing code while waiting, connected/disconnected otherwise.
+    /// Never blocks touches, and the prompter keeps running if the link drops.
+    private var remoteBadge: some View {
+        VStack {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    RemoteStatusBadge(status: remote.status)
+                    if remote.status != .connected && !engine.isPlaying {
+                        Text("Remote code \(remote.code)")
+                            .font(.headline.monospacedDigit())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(.black.opacity(0.55), in: Capsule())
+                    }
+                }
+                Spacer()
+            }
+            .padding(.leading, 16)
+            .padding(.top, showControls && !engine.isPlaying ? 100 : 16)
+            Spacer()
+        }
+        .allowsHitTesting(false)
     }
 
     private var fontBinding: Binding<Double> {
@@ -664,6 +712,43 @@ struct PrompterView: View {
             .onEnded { _ in
                 dragStartOffset = nil
             }
+    }
+
+    // MARK: Remote control (v1.1)
+
+    /// Remote commands reuse the same actions as the keyboard shortcuts.
+    /// Allow Remote is already Pro-gated, so no extra check here.
+    private func handleRemote(_ command: RemoteCommand) {
+        switch command {
+        case .playPause: togglePlay()
+        case .speedUp: changeSpeed(by: 10)
+        case .speedDown: changeSpeed(by: -10)
+        case .jumpBack: remoteJump(-1)
+        case .jumpForward: remoteJump(1)
+        case .resetToTop: jumpToTop()
+        }
+        sendRemoteState()
+    }
+
+    /// Markers/chapters if the script has any, otherwise about a screenful.
+    private func remoteJump(_ direction: Int) {
+        if jumpPoints.isEmpty {
+            let screen = max(scaledFont * 3, UIScreen.main.bounds.height * 0.6)
+            engine.jump(to: engine.offset + CGFloat(direction) * screen)
+        } else {
+            jumpRelative(direction)
+        }
+    }
+
+    private var currentPointTitle: String? {
+        let points = jumpPoints
+        let here = engine.offset + 2
+        return points.last(where: { (lineTops[$0.lineIndex] ?? .greatestFiniteMagnitude) <= here })?.title
+    }
+
+    private func sendRemoteState() {
+        guard remote.status == .connected else { return }
+        remote.send(RemoteState(isPlaying: engine.isPlaying || countdown != nil, speed: speed, markerTitle: currentPointTitle))
     }
 
     /// Runs a keyboard action if Pro (keyboard control is a Pro feature), otherwise explains.

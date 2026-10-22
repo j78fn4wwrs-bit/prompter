@@ -79,3 +79,15 @@ Tap + > **Import File**. The title should be the file name; errors show in an al
 46. [ ] **Chapters list:** the list button (top right in the prompter) shows Top, headings and markers with numbers 1–9. Tapping one scrolls smoothly there. Swipe a marker to delete it.
 47. [ ] **Markers persist:** add markers, exit, relaunch the app: they're still there. Old scripts from before this update open fine (no data loss).
 48. [ ] **Bookmark button** (top right, when paused) adds a marker at the reading line, same as M.
+
+## v1.1 Remote control (two real devices)
+
+The Simulator can't really test this (Multipeer between simulators is unreliable), so use two physical devices on the same Wi-Fi, e.g. your iPad as the prompter and your iPhone as the remote. Take it slow; one short session is plenty.
+
+49. [ ] **Remote button:** on the script list, the remote icon (top right) opens Remote Control, free, no paywall. The screen stays awake while it's open.
+50. [ ] **Allow Remote (Pro):** on the prompter device, open a script. With Pro off, the remote icon in the bottom panel shows a lock and opens "Remote control of this prompter is Pro". With Pro on (gear > Unlock Pro for testing), tap it: a "Waiting" pill and "Remote code 1234" appear top left.
+51. [ ] **Local network prompt:** the first time on each device, iOS asks to use the local network. Tap Allow. (If you tapped Don't Allow: Settings > Steady Prompter > Local Network.)
+52. [ ] **Pair:** on the remote, the prompter's device name shows under Nearby prompters. Tap it, type the code, Connect. Both show "Connected". A wrong code shows a friendly error.
+53. [ ] **Buttons:** Play/Pause (3-2-1 countdown on the prompter), Slower/Faster (speed toast), Back/Forward (chapters or markers; on a script without any, about one screen), Back to Top. The remote shows Playing/Paused, speed and the current chapter.
+54. [ ] **Link drops:** while playing, turn Wi-Fi off on the remote. The prompter keeps scrolling and shows "Disconnected". Turn Wi-Fi back on with the Remote screen open: it reconnects by itself, no code needed.
+55. [ ] **Remembered:** close and reopen Remote Control and the prompter: it reconnects on its own. "Forget paired prompter" makes it ask for the code again.

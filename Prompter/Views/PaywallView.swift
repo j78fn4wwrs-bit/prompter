@@ -35,6 +35,7 @@ struct PaywallView: View {
                     featureRow("video.fill", "Record yourself with the front camera while your script scrolls, saved to Photos")
                     featureRow("keyboard", "Keyboard and clicker control: space to play/pause, arrows for speed and markers, ⌘+/⌘− for text size")
                     featureRow("paintpalette.fill", "Any custom text and background color (the basic presets are free)")
+                    featureRow("appletvremote.gen4.fill", "Control this prompter from a second iPhone or iPad nearby (the remote device stays free)")
                     featureRow("clock.fill", "Estimated read time for every script")
 
                     if store.isPro {
