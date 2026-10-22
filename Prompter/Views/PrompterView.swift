@@ -345,7 +345,12 @@ struct PrompterView: View {
                     .accessibilityLabel("Camera")
                     proButton(icon: "appletvremote.gen4", active: remote.isRunning, feature: .remote) {
                         allowRemote.toggle()
-                        if allowRemote { remote.start() } else { remote.stop() }
+                        if allowRemote {
+                            remote.start()
+                        } else {
+                            remote.stop()
+                            remote.forgetPairedRemote()
+                        }
                     }
                     .accessibilityLabel(remote.isRunning ? "Allow Remote: on" : "Allow Remote: off")
                     // Colors: basic presets are free, custom colors are Pro (inside the sheet).
@@ -363,6 +368,16 @@ struct PrompterView: View {
                     }
                 }
                 .font(.title2)
+                if remote.hasPairedRemote {
+                    Button(role: .destructive) {
+                        remote.forgetPairedRemote()
+                    } label: {
+                        Label("Forget paired remote", systemImage: "xmark.circle")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 Text("Tap anywhere to start or pause. Drag to move. ⌘/ for keyboard shortcuts.")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.7))

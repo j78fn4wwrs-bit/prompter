@@ -74,6 +74,9 @@ final class RemoteHost: NSObject, ObservableObject {
     @Published private(set) var status: RemoteLinkStatus = .off
     @Published private(set) var code: String = ""
     @Published private(set) var remoteName: String?
+    /// True while a remote's token is saved on this prompter.
+    @Published private(set) var hasPairedRemote: Bool =
+        UserDefaults.standard.string(forKey: RemotePrefKey.hostPairedToken) != nil
 
     /// Commands from the remote, delivered on the main actor.
     let commands = PassthroughSubject<RemoteCommand, Never>()
@@ -140,6 +143,20 @@ final class RemoteHost: NSObject, ObservableObject {
         UserDefaults.standard.set(token, forKey: RemotePrefKey.hostPairedToken)
         UserDefaults.standard.set(name, forKey: RemotePrefKey.hostPairedName)
         gate.set(code: code, token: token)
+        hasPairedRemote = true
+    }
+
+    /// Deletes the saved remote token and name right away and drops any live connection.
+    /// If Allow Remote is still on, it keeps advertising with a fresh code, so the
+    /// old remote has to enter the new code to pair again.
+    func forgetPairedRemote() {
+        UserDefaults.standard.removeObject(forKey: RemotePrefKey.hostPairedToken)
+        UserDefaults.standard.removeObject(forKey: RemotePrefKey.hostPairedName)
+        gate.set(code: code, token: nil)
+        hasPairedRemote = false
+        let wasRunning = isRunning
+        stop()
+        if wasRunning { start() }
     }
 
     fileprivate func received(_ message: RemoteMessage) {
