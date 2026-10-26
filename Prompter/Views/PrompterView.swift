@@ -14,6 +14,7 @@ struct PrompterView: View {
     @AppStorage(PrefKey.speed) private var speed: Double = 60
     @AppStorage(PrefKey.fontSize) private var fontSize: Double = 44
     @AppStorage(PrefKey.mirror) private var mirror: Bool = false
+    @AppStorage(PrefKey.prompterMarkerRail) private var showMarkerRail: Bool = true
     @AppStorage(PrefKey.textHex) private var textHex: String = "#FFFFFF"
     @AppStorage(PrefKey.backgroundHex) private var backgroundHex: String = "#000000"
 
@@ -130,6 +131,9 @@ struct PrompterView: View {
                 }
                 if showControls && !engine.isPlaying && countdown == nil {
                     controls
+                    if showMarkerRail && !markerPoints.isEmpty {
+                        markerRail(height: geo.size.height)
+                    }
                 }
                 if let hud {
                     hudView(hud)
@@ -313,6 +317,83 @@ struct PrompterView: View {
         .allowsHitTesting(false)
     }
 
+    private var markerPoints: [JumpPoint] { jumpPoints.filter { $0.kind == .marker } }
+
+    /// The last marker at or above the reading line.
+    private var currentMarkerID: String? {
+        var found: String?
+        for point in markerPoints {
+            let top = lineTops[point.lineIndex] ?? 0
+            if top <= engine.offset + 1 { found = point.id }
+        }
+        return found
+    }
+
+    /// Slim markers list on the right edge. Only shown while paused (with the other controls),
+    /// so it never covers the text during a read. It is not mirrored, like the other controls.
+    private func markerRail(height: CGFloat) -> some View {
+        let current = currentMarkerID
+        return HStack {
+            Spacer()
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Markers")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(overlayIconColor.opacity(0.7))
+                    .padding(.horizontal, 6)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(markerPoints) { point in
+                            let isCurrent = point.id == current
+                            Button {
+                                jump(toLine: point.lineIndex, label: point.title)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: isCurrent ? "bookmark.fill" : "bookmark")
+                                        .foregroundStyle(isCurrent ? LensGlassColor.yellow : overlayIconColor)
+                                    Text(point.title)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+                                        .foregroundStyle(overlayIconColor)
+                                    Spacer(minLength: 0)
+                                }
+                                .font(.footnote.weight(isCurrent ? .bold : .regular))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(isCurrent ? LensGlassColor.yellow.opacity(0.25) : Color.clear)
+                                )
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button { beginRailRename(point) } label: {
+                                    Label("Rename", systemImage: "pencil")
+                                }
+                                Button(role: .destructive) { removeMarker(point) } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            .accessibilityLabel(isCurrent ? "\(point.title), current" : point.title)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .frame(width: min(220, viewWidth * 0.32))
+            .frame(maxHeight: height * 0.4)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(isLightBackground ? Color.white.opacity(0.85) : Color.black.opacity(0.55))
+            )
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(overlayIconColor.opacity(0.2), lineWidth: 1))
+            .padding(.trailing, 12)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.top, 110)
+        .transition(.opacity)
+    }
+
     /// Round overlay button whose icon and fill contrast with the prompter background.
     private func topButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -335,6 +416,10 @@ struct PrompterView: View {
                 Spacer()
                 topButton("keyboard", label: "Keyboard shortcuts") { showHelp = true }
                 topButton("list.bullet", label: "Chapters and markers") { showChapters = true }
+                topButton(showMarkerRail ? "sidebar.right" : "sidebar.squares.right",
+                          label: showMarkerRail ? "Hide markers list" : "Show markers list") {
+                    showMarkerRail.toggle()
+                }
                 topButton("bookmark", label: "Add marker here") { addMarker() }
                 topButton("backward.end.fill", label: "Back to top") { engine.reset(); flash("Top") }
             }
@@ -914,6 +999,13 @@ struct PrompterView: View {
         guard point.kind == .marker, let offset = Int(point.id.dropFirst()) else { return }
         renameText = script.markerName(for: offset)
         listRenameOffset = offset
+    }
+
+    /// Rename from the on-screen rail uses the main-view alert (the sheet is not open).
+    private func beginRailRename(_ point: JumpPoint) {
+        guard point.kind == .marker, let offset = Int(point.id.dropFirst()) else { return }
+        renameText = script.markerName(for: offset)
+        renameOffset = offset
     }
 
     private var showRenameAlert: Binding<Bool> {

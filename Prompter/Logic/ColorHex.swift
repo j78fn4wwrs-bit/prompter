@@ -31,4 +31,6 @@ enum PrefKey {
     static let textHex = "textHex"
     static let backgroundHex = "backgroundHex"
     static let seeded = "seededSample"
+    static let prompterMarkerRail = "prompterMarkerRail"
+    static let editorMarkerPanel = "editorMarkerPanel"
 }

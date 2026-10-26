@@ -9,6 +9,8 @@ struct ScriptTextView: UIViewRepresentable {
     var onFileDrop: ([NSItemProvider]) -> Void
     /// Cursor position as a Character offset into `text` (same units as Script.markerOffsets).
     var onCursorChange: (Int) -> Void = { _ in }
+    /// Set to a Character offset to move the cursor there and scroll it into view; reset to nil after.
+    var jumpTo: Binding<Int?> = .constant(nil)
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -41,6 +43,16 @@ struct ScriptTextView: UIViewRepresentable {
             let len = (text as NSString).length
             tv.selectedRange = NSRange(location: min(selected.location, len), length: 0)
             ScriptTextView.styleHeadings(in: tv)
+        }
+        if let target = jumpTo.wrappedValue {
+            let clamped = min(max(target, 0), text.count)
+            let index = text.index(text.startIndex, offsetBy: clamped)
+            let location = NSRange(index..<index, in: text).location
+            let range = NSRange(location: min(location, (tv.text as NSString).length), length: 0)
+            tv.selectedRange = range
+            tv.scrollRangeToVisible(range)
+            let binding = jumpTo
+            DispatchQueue.main.async { binding.wrappedValue = nil }
         }
     }
 

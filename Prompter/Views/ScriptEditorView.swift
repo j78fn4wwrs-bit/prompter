@@ -13,8 +13,20 @@ struct ScriptEditorView: View {
     @State private var renameOffset: Int?
     @State private var renameText = ""
     @State private var markerNote: String?
+    @State private var jumpTarget: Int?
+    @State private var showMarkerSheet = false
+    @AppStorage(PrefKey.editorMarkerPanel) private var showMarkerPanel: Bool = true
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isWide: Bool { horizontalSizeClass == .regular }
+    private var markerPoints: [JumpPoint] {
+        ScriptOutline.jumpPoints(lines: ScriptOutline.lines(script.text),
+                                 markers: script.markerOffsets ?? [],
+                                 names: script.markerNames ?? [:]).filter { $0.kind == .marker }
+    }
 
     var body: some View {
+        HStack(spacing: 0) {
         VStack(spacing: 0) {
             TextField("Title", text: $script.title)
                 .font(.title2.bold())
@@ -29,7 +41,14 @@ struct ScriptEditorView: View {
                 }
                 let markerCount = script.markerOffsets?.count ?? 0
                 if markerCount > 0 {
-                    LensGlassChip(text: "\(markerCount) marker\(markerCount == 1 ? "" : "s")", systemImage: "bookmark.fill")
+                    // Wide: shows/hides the side panel. Compact (iPhone): opens the list as a sheet.
+                    Button {
+                        if isWide { showMarkerPanel.toggle() } else { showMarkerSheet = true }
+                    } label: {
+                        LensGlassChip(text: "\(markerCount) marker\(markerCount == 1 ? "" : "s")", systemImage: "bookmark.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(markerCount) markers, show list")
                 }
                 Button { addMarkerAtCursor() } label: {
                     Label("Add Marker", systemImage: "bookmark")
@@ -58,11 +77,31 @@ struct ScriptEditorView: View {
             .padding(.vertical, 6)
             Divider().overlay(LensGlassColor.separator)
             ScriptTextView(text: $script.text, onFileDrop: onFileDrop,
-                           onCursorChange: { cursorOffset = $0 })
+                           onCursorChange: { cursorOffset = $0 },
+                           jumpTo: $jumpTarget)
                 .padding(.horizontal, 12)
         }
         .frame(maxWidth: 820)
         .frame(maxWidth: .infinity)
+            if isWide && showMarkerPanel && !markerPoints.isEmpty {
+                Divider().overlay(LensGlassColor.separator)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("Markers").font(.headline).foregroundStyle(LensGlassColor.label)
+                        Spacer()
+                        Button { showMarkerPanel = false } label: {
+                            Image(systemName: "sidebar.right")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Hide markers list")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    markerList
+                }
+                .frame(width: 260)
+            }
+        }
         .background(LensGlassColor.card.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -81,7 +120,7 @@ struct ScriptEditorView: View {
             PrompterView(script: script)
                 .environmentObject(store)
         }
-        .alert("Name Marker", isPresented: Binding(get: { renameOffset != nil },
+        .alert("Name Marker", isPresented: Binding(get: { renameOffset != nil && !showMarkerSheet },
                                                    set: { if !$0 { renameOffset = nil } })) {
             TextField("Marker name", text: $renameText)
             Button("Save") {
@@ -89,6 +128,17 @@ struct ScriptEditorView: View {
                 renameOffset = nil
             }
             Button("Cancel", role: .cancel) { renameOffset = nil }
+        }
+        .sheet(isPresented: $showMarkerSheet) {
+            NavigationStack {
+                markerList
+                    .navigationTitle("Markers")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) { Button("Done") { showMarkerSheet = false } }
+                    }
+            }
+            .presentationDetents([.medium, .large])
         }
         .sheet(item: $paywallFeature) { feature in
             PaywallView(feature: feature).environmentObject(store)
@@ -98,6 +148,63 @@ struct ScriptEditorView: View {
             onFileDrop(providers)
             return true
         }
+    }
+
+    private var markerList: some View {
+        List {
+            ForEach(markerPoints) { point in
+                Button { goTo(point) } label: {
+                    HStack {
+                        Image(systemName: "bookmark.fill").foregroundStyle(.orange)
+                        Text(point.title).foregroundStyle(.primary).lineLimit(2)
+                        Spacer()
+                    }
+                }
+                .contextMenu {
+                    Button { beginRename(point) } label: { Label("Rename", systemImage: "pencil") }
+                    Button(role: .destructive) { deleteMarker(point) } label: { Label("Delete", systemImage: "trash") }
+                }
+                .swipeActions {
+                    Button(role: .destructive) { deleteMarker(point) } label: { Label("Delete", systemImage: "trash") }
+                    Button { beginRename(point) } label: { Label("Rename", systemImage: "pencil") }
+                        .tint(LensGlassColor.accent)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .tint(LensGlassColor.accent)
+        .alert("Rename Marker", isPresented: Binding(get: { renameOffset != nil && showMarkerSheet },
+                                                     set: { if !$0 { renameOffset = nil } })) {
+            TextField("Marker name", text: $renameText)
+            Button("Save") {
+                if let offset = renameOffset { script.renameMarker(at: offset, to: renameText) }
+                renameOffset = nil
+            }
+            Button("Cancel", role: .cancel) { renameOffset = nil }
+        }
+    }
+
+    private func markerOffset(of point: JumpPoint) -> Int? {
+        guard point.kind == .marker else { return nil }
+        return Int(point.id.dropFirst())
+    }
+
+    private func goTo(_ point: JumpPoint) {
+        guard let offset = markerOffset(of: point) else { return }
+        jumpTarget = offset
+        showMarkerSheet = false
+    }
+
+    private func beginRename(_ point: JumpPoint) {
+        guard let offset = markerOffset(of: point) else { return }
+        renameText = script.markerName(for: offset)
+        renameOffset = offset
+    }
+
+    private func deleteMarker(_ point: JumpPoint) {
+        guard let offset = markerOffset(of: point) else { return }
+        script.removeMarker(at: offset)
     }
 
     /// Marks the line the cursor is on, the same way the prompter's bookmark button does.
