@@ -16,17 +16,41 @@ enum RemoteCommand: String, Codable, Sendable, CaseIterable {
     case playPause, speedUp, speedDown, jumpBack, jumpForward, resetToTop
 }
 
+/// Marker actions from the remote. Sent as their own message case so older builds simply
+/// fail to decode them and ignore them (the existing commands are unchanged).
+enum RemoteMarkerCommand: Codable, Sendable, Equatable {
+    case add
+    case next
+    case previous
+    /// `key` is the marker's character offset (same key as Script.markerNames).
+    case jump(key: Int)
+}
+
+/// One marker as the remote shows it.
+struct RemoteMarker: Codable, Sendable, Equatable, Identifiable {
+    var key: Int
+    var name: String
+    /// The set timecode, or the estimate when `isEstimate` is true.
+    var seconds: Double
+    var isEstimate: Bool
+    var id: Int { key }
+}
+
 /// Status the prompter sends back to the remote.
 struct RemoteState: Codable, Sendable, Equatable {
     var isPlaying: Bool
     /// Points per second (same value as the speed slider).
     var speed: Double
     var markerTitle: String?
+    /// Optional so older remotes/hosts that don't send or expect them still decode.
+    var markers: [RemoteMarker]? = nil
+    var currentMarkerKey: Int? = nil
 }
 
 enum RemoteMessage: Codable, Sendable {
     case command(RemoteCommand)
     case state(RemoteState)
+    case marker(RemoteMarkerCommand)
 }
 
 /// Sent as the invitation context. Either the 4-digit code (first pairing)
@@ -80,6 +104,7 @@ final class RemoteHost: NSObject, ObservableObject {
 
     /// Commands from the remote, delivered on the main actor.
     let commands = PassthroughSubject<RemoteCommand, Never>()
+    let markerCommands = PassthroughSubject<RemoteMarkerCommand, Never>()
 
     private let peerID = MCPeerID(displayName: UIDevice.current.name)
     private var session: MCSession?
@@ -160,7 +185,11 @@ final class RemoteHost: NSObject, ObservableObject {
     }
 
     fileprivate func received(_ message: RemoteMessage) {
-        if case .command(let command) = message { commands.send(command) }
+        switch message {
+        case .command(let command): commands.send(command)
+        case .marker(let command): markerCommands.send(command)
+        case .state: break
+        }
     }
 
     fileprivate var currentSession: MCSession? { session }
@@ -272,6 +301,12 @@ final class RemoteClient: NSObject, ObservableObject {
     func send(_ command: RemoteCommand) {
         guard let session, let peer = connectedPeer,
               let data = try? JSONEncoder().encode(RemoteMessage.command(command)) else { return }
+        try? session.send(data, toPeers: [peer], with: .reliable)
+    }
+
+    func send(marker command: RemoteMarkerCommand) {
+        guard let session, let peer = connectedPeer,
+              let data = try? JSONEncoder().encode(RemoteMessage.marker(command)) else { return }
         try? session.send(data, toPeers: [peer], with: .reliable)
     }
 

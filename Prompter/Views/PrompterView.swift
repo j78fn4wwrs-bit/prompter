@@ -171,6 +171,7 @@ struct PrompterView: View {
             if allowRemote && store.isPro { remote.start() }
         }
         .onReceive(remote.commands) { command in handleRemote(command) }
+        .onReceive(remote.markerCommands) { command in handleRemoteMarker(command) }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             if remote.status == .connected { sendRemoteState() }
         }
@@ -973,7 +974,8 @@ struct PrompterView: View {
         return best
     }
 
-    private func addMarker() {
+    /// `offerEdit: false` for the remote, so the host never pops a sheet the operator didn't ask for.
+    private func addMarker(offerEdit: Bool = true) {
         let ls = lines
         let idx = currentLineIndex
         guard ls.indices.contains(idx) else { return }
@@ -983,7 +985,7 @@ struct PrompterView: View {
         }
         flash("\(script.defaultMarkerName(for: offset)) added")
         // Offer a name only while paused, so a live read (M key, remote) is never interrupted.
-        if !engine.isPlaying && countdown == nil {
+        if offerEdit && !engine.isPlaying && countdown == nil {
             renameText = script.defaultMarkerName(for: offset)
             renameOffset = offset
         }
@@ -1078,6 +1080,30 @@ struct PrompterView: View {
         sendRemoteState()
     }
 
+    private func handleRemoteMarker(_ command: RemoteMarkerCommand) {
+        switch command {
+        case .add: addMarker(offerEdit: false)
+        case .next: jumpRelative(1, markersOnly: true)
+        case .previous: jumpRelative(-1, markersOnly: true)
+        case .jump(let key):
+            if let point = markerPoints.first(where: { $0.id == "m\(key)" }) {
+                jump(toLine: point.lineIndex, label: point.title)
+            }
+        }
+        sendRemoteState()
+    }
+
+    private var remoteMarkers: [RemoteMarker] {
+        markerPoints.compactMap { point in
+            guard let key = Int(point.id.dropFirst()) else { return nil }
+            if let set = script.markerTimecode(for: key) {
+                return RemoteMarker(key: key, name: point.title, seconds: set, isEstimate: false)
+            }
+            return RemoteMarker(key: key, name: point.title,
+                                seconds: script.estimatedSeconds(for: key), isEstimate: true)
+        }
+    }
+
     /// Markers/chapters if the script has any, otherwise about a screenful.
     private func remoteJump(_ direction: Int) {
         if jumpPoints.isEmpty {
@@ -1096,7 +1122,10 @@ struct PrompterView: View {
 
     private func sendRemoteState() {
         guard remote.status == .connected else { return }
-        remote.send(RemoteState(isPlaying: engine.isPlaying || countdown != nil, speed: speed, markerTitle: currentPointTitle))
+        let currentKey = currentMarkerID.flatMap { Int($0.dropFirst()) }
+        remote.send(RemoteState(isPlaying: engine.isPlaying || countdown != nil, speed: speed,
+                                markerTitle: currentPointTitle,
+                                markers: remoteMarkers, currentMarkerKey: currentKey))
     }
 
     /// Runs a keyboard action if Pro (keyboard control is a Pro feature), otherwise explains.

@@ -7,6 +7,9 @@ struct RemoteControlView: View {
     @StateObject private var client = RemoteClient()
     @State private var selected: NearbyPrompter?
     @State private var code = ""
+    @State private var showMarkers = false
+    /// Remote look: Dark (navy, white, yellow) by default, or Light. Independent of the system setting.
+    @AppStorage("remote.appearanceDark") private var darkAppearance: Bool = true
 
     var body: some View {
         NavigationStack {
@@ -25,10 +28,26 @@ struct RemoteControlView: View {
                         .tint(LensGlassColor.accent)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    RemoteStatusBadge(status: client.status)
+                    HStack(spacing: 10) {
+                        Button { darkAppearance.toggle() } label: {
+                            Image(systemName: darkAppearance ? "sun.max.fill" : "moon.fill")
+                                .foregroundStyle(darkAppearance ? LensGlassColor.yellow : LensGlassColor.label)
+                        }
+                        .accessibilityLabel(darkAppearance ? "Switch to light look" : "Switch to dark look")
+                        RemoteStatusBadge(status: client.status)
+                    }
                 }
             }
+            .sheet(isPresented: $showMarkers) {
+                markersSheet
+                    .preferredColorScheme(darkAppearance ? .dark : .light)
+            }
         }
+        // The SP/D1 color sets have Light and Dark variants; forcing the scheme gives the
+        // navy/white/yellow look (Dark) or the pale-blue/navy look (Light) on every state,
+        // including the code alert, whatever the system appearance is.
+        .preferredColorScheme(darkAppearance ? .dark : .light)
+        .tint(darkAppearance ? LensGlassColor.yellow : LensGlassColor.accent)
         .onAppear {
             client.start()
             UIApplication.shared.isIdleTimerDisabled = true
@@ -125,8 +144,25 @@ struct RemoteControlView: View {
             }
             .frame(minHeight: 60, maxHeight: 92)
 
-            padButton("Back to Top", icon: "backward.end.fill", role: .utility, fontSize: 22, command: .resetToTop)
-                .frame(minHeight: 50, maxHeight: 66)
+            HStack(spacing: 10) {
+                markerButton("Prev", icon: "chevron.up", command: .previous)
+                markerButton("Marker", icon: "bookmark.fill", command: .add)
+                markerButton("Next", icon: "chevron.down", command: .next)
+            }
+            .frame(minHeight: 50, maxHeight: 70)
+
+            HStack(spacing: 10) {
+                Button { showMarkers = true } label: {
+                    Label("Markers (\(client.state?.markers?.count ?? 0))", systemImage: "list.bullet")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 18))
+                .disabled(client.state?.markers == nil)
+                .accessibilityLabel("Markers list")
+                padButton("Top", icon: "backward.end.fill", role: .utility, fontSize: 18, command: .resetToTop)
+                    .accessibilityLabel("Back to Top")
+            }
+            .frame(minHeight: 50, maxHeight: 62)
 
             Spacer(minLength: 0)
         }
@@ -179,6 +215,69 @@ struct RemoteControlView: View {
                 .lineLimit(1)
                 .foregroundStyle(LensGlassColor.label)
         }
+    }
+
+    private func markerButton(_ title: String, icon: String, command: RemoteMarkerCommand) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            client.send(marker: command)
+        } label: {
+            Label(title, systemImage: icon)
+                .labelStyle(.titleAndIcon)
+        }
+        .buttonStyle(LensGlassButtonStyle(role: .secondary, fontSize: 17, horizontalPadding: 8))
+        .accessibilityLabel(command == .add ? "Add marker" : (command == .next ? "Next marker" : "Previous marker"))
+    }
+
+    private var markersSheet: some View {
+        NavigationStack {
+            List {
+                let markers = client.state?.markers ?? []
+                if markers.isEmpty {
+                    Text(client.state?.markers == nil
+                         ? "Update the app on the prompter to see markers here."
+                         : "No markers yet. Tap Marker to add one at the reading line.")
+                        .foregroundStyle(LensGlassColor.secondaryLabel)
+                        .listRowBackground(LensGlassColor.card)
+                }
+                ForEach(markers) { marker in
+                    let isCurrent = marker.key == client.state?.currentMarkerKey
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        client.send(marker: .jump(key: marker.key))
+                    } label: {
+                        HStack {
+                            Image(systemName: isCurrent ? "bookmark.fill" : "bookmark")
+                                .foregroundStyle(LensGlassColor.yellow)
+                            Text(marker.name)
+                                .font(.body.weight(isCurrent ? .bold : .regular))
+                                .foregroundStyle(LensGlassColor.label)
+                                .lineLimit(2)
+                            Spacer()
+                            if marker.isEstimate {
+                                Text("~" + Timecode.format(marker.seconds))
+                                    .font(.footnote.monospacedDigit().italic())
+                                    .foregroundStyle(LensGlassColor.secondaryLabel)
+                            } else {
+                                Text(Timecode.format(marker.seconds))
+                                    .font(.footnote.monospacedDigit().weight(.semibold))
+                                    .foregroundStyle(LensGlassColor.label)
+                            }
+                        }
+                    }
+                    .listRowBackground(isCurrent ? LensGlassColor.yellow.opacity(0.22) : LensGlassColor.card)
+                    .accessibilityLabel(isCurrent ? "\(marker.name), current" : marker.name)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(LensGlassBackground())
+            .navigationTitle("Markers")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { showMarkers = false } }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 
     private func padButton(_ title: String, icon: String, role: LensGlassRole,

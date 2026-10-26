@@ -134,3 +134,15 @@ Check each on iPhone, iPad and Mac (Designed for iPad), in Light and Dark mode. 
 85. [ ] **Use estimated time:** tap it: the field fills with the estimate shown on the button (words before the marker at 150 words per minute, same pace as the "~0:37 read" chip). Markers without a timecode show that estimate as grey italic "~0:12" in every list.
 86. [ ] **Delete in the sheet:** Delete Marker removes it from all lists and its timecode is gone (re-adding a marker on that line starts with no timecode or name).
 87. [ ] **Old data:** scripts from earlier builds open with markers intact and no timecodes (estimates shown).
+
+## v1.1 Remote look and markers on the remote
+
+Needs both devices on this build (Pro on the prompter, Allow Remote on).
+
+88. [ ] **Remote look, Dark (default):** with the iPhone in Light mode, open Remote. "Looking for prompters…", the nearby list, the code alert and the connected pad all show the navy gradient with white text and yellow icons/accents.
+89. [ ] **Look toggle:** tap the sun button next to the status pill: everything switches to the light look (pale-blue background, navy text, yellow accents, dark icons on the buttons) in every state, including the code alert and the Markers sheet. Tap the moon to go back. Close and reopen Remote: the choice is remembered. Changing the system appearance doesn't change it.
+90. [ ] **Add Marker from the remote:** connected, tap Marker (while paused and while playing). The prompter shows "Marker N added" and no edit sheet opens on the prompter. The Markers count on the remote goes up within about a second.
+91. [ ] **Prev / Next:** with 2+ markers, Next and Prev on the remote jump the reading line like Tab / Shift-Tab (chapters skipped; "Last marker" at the end).
+92. [ ] **Remote markers list:** tap "Markers (N)": each marker shows its name and timecode on the right (set timecode in bold digits, or the estimate as grey italic "~0:12"). The current one is highlighted. Tap a row: the prompter jumps there and the highlight follows. Rename/timecode changes made on the prompter show up within about a second.
+93. [ ] **Mixed versions:** an older prompter build still works with the new remote's Play/Speed/Back/Forward buttons; Markers says "Update the app on the prompter to see markers here".
+94. [ ] **Fit:** on the smallest iPhone, the connected pad (Play, Slower/Faster, Back/Forward, Prev/Marker/Next, Markers/Top) fits without scrolling in both looks.
