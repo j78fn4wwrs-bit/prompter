@@ -10,12 +10,64 @@ final class Script {
     /// Live-run markers, stored as character offsets into `text`.
     /// Optional with a default so existing stores migrate automatically (lightweight).
     var markerOffsets: [Int]? = nil
+    /// Custom marker names, keyed by the marker's offset as a string ("120" -> "Intro take 2").
+    /// Unnamed markers show as "Marker N". Optional so existing stores migrate (lightweight).
+    var markerNames: [String: String]? = nil
 
     init(title: String, text: String) {
         self.title = title
         self.text = text
         self.createdAt = Date()
         self.updatedAt = Date()
+    }
+
+    /// Adds a marker at the start of the line containing `charOffset`.
+    /// Returns the stored offset, or nil if a marker is already on that line.
+    @discardableResult
+    func addMarker(atLineContaining charOffset: Int) -> Int? {
+        let ls = ScriptOutline.lines(text)
+        let idx = ScriptOutline.lineIndex(for: charOffset, in: ls)
+        guard ls.indices.contains(idx) else { return nil }
+        let offset = ls[idx].startOffset
+        var current = markerOffsets ?? []
+        if current.contains(offset) { return nil }
+        current.append(offset)
+        current.sort()
+        markerOffsets = current
+        return offset
+    }
+
+    /// 1-based position of a marker among all markers, in script order.
+    func markerNumber(for offset: Int) -> Int {
+        ((markerOffsets ?? []).sorted().firstIndex(of: offset) ?? 0) + 1
+    }
+
+    func defaultMarkerName(for offset: Int) -> String { "Marker \(markerNumber(for: offset))" }
+
+    /// Custom name if set, otherwise "Marker N".
+    func markerName(for offset: Int) -> String {
+        if let name = markerNames?[String(offset)], !name.isEmpty { return name }
+        return defaultMarkerName(for: offset)
+    }
+
+    /// An empty name (or the default "Marker N") clears the custom name.
+    func renameMarker(at offset: Int, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        var names = markerNames ?? [:]
+        if trimmed.isEmpty || trimmed == defaultMarkerName(for: offset) {
+            names[String(offset)] = nil
+        } else {
+            names[String(offset)] = trimmed
+        }
+        markerNames = names.isEmpty ? nil : names
+    }
+
+    func removeMarker(at offset: Int) {
+        markerOffsets = (markerOffsets ?? []).filter { $0 != offset }
+        if var names = markerNames {
+            names[String(offset)] = nil
+            markerNames = names.isEmpty ? nil : names
+        }
     }
 
     var wordCount: Int {
@@ -92,7 +144,7 @@ enum ScriptOutline {
     }
 
     /// Headings plus saved markers, in script order.
-    static func jumpPoints(lines: [ScriptLine], markers: [Int]) -> [JumpPoint] {
+    static func jumpPoints(lines: [ScriptLine], markers: [Int], names: [String: String] = [:]) -> [JumpPoint] {
         var points: [JumpPoint] = lines.filter { $0.headingLevel > 0 }.map {
             JumpPoint(id: "h\($0.id)", lineIndex: $0.id,
                       title: $0.text.isEmpty ? "Chapter" : $0.text, kind: .heading)
@@ -102,9 +154,13 @@ enum ScriptOutline {
             markerNumber += 1
             let li = lineIndex(for: m, in: lines)
             let preview = lines.indices.contains(li) ? String(lines[li].text.prefix(40)) : ""
-            points.append(JumpPoint(id: "m\(m)", lineIndex: li,
-                                    title: "Marker \(markerNumber)" + (preview.isEmpty ? "" : ": \(preview)"),
-                                    kind: .marker))
+            let title: String
+            if let custom = names[String(m)], !custom.isEmpty {
+                title = custom
+            } else {
+                title = "Marker \(markerNumber)" + (preview.isEmpty ? "" : ": \(preview)")
+            }
+            points.append(JumpPoint(id: "m\(m)", lineIndex: li, title: title, kind: .marker))
         }
         return points.sorted { $0.lineIndex == $1.lineIndex ? $0.kind == .heading : $0.lineIndex < $1.lineIndex }
     }

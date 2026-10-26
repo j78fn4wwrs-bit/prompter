@@ -7,6 +7,8 @@ import UIKit
 struct ScriptTextView: UIViewRepresentable {
     @Binding var text: String
     var onFileDrop: ([NSItemProvider]) -> Void
+    /// Cursor position as a Character offset into `text` (same units as Script.markerOffsets).
+    var onCursorChange: (Int) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -84,6 +86,15 @@ struct ScriptTextView: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             ScriptTextView.styleHeadings(in: textView)
             parent.text = textView.text
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            // selectedRange is in UTF-16 units; markers use Character offsets.
+            let ns = textView.text as NSString
+            let location = min(textView.selectedRange.location, ns.length)
+            let offset = ns.substring(to: location).count
+            let callback = parent.onCursorChange
+            DispatchQueue.main.async { callback(offset) }
         }
 
         // MARK: Drop

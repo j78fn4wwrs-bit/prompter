@@ -115,3 +115,13 @@ Check each on iPhone, iPad and Mac (Designed for iPad), in Light and Dark mode. 
 67. [ ] **Remote pairing list (iPhone):** gradient background, card rows, glass tile next to each nearby prompter, "Paired"/"Reconnecting…" text readable. Code entry alert and "Forget paired prompter" work as before.
 68. [ ] **Prompter sheets:** Colors, Chapters & Markers and Keyboard Shortcuts sheets show the gradient background behind their rows, in both modes.
 69. [ ] Prompter with a keyboard (Pro): add 2–3 markers with M. Tab jumps to the next marker, Shift-Tab to the previous one. Chapters (#) are skipped. With no markers, Tab shows "No markers yet". At the last marker it shows "Last marker"; Shift-Tab before the first goes to the top. The ⌘/ help lists Tab / Shift-Tab.
+
+## v1.1 Markers from more places
+
+70. [ ] **Editor Add Marker:** open a script in the editor, tap inside a line in the middle of the text, then tap the navy glass "Add Marker" pill next to the word/chapter chips. A "Name Marker" alert opens pre-filled with "Marker N". Save it. A yellow "N markers" chip appears. Tap Add Marker again on the same line: "Already marked" shows briefly and nothing is added.
+71. [ ] **Editor marker in prompter:** press Start. The marked line has the marker bar, it is listed in Chapters & Markers under your name, and Tab (Pro keyboard) jumps to it.
+72. [ ] **Control panel Marker button:** in the prompter, paused, the bottom panel has a bookmark button right after Mirror, Camera and Colors. Tap it: "Marker N added" shows and the Name Marker alert opens. It does exactly what the top bookmark button and M do.
+73. [ ] **Naming while prompting:** while playing, press M (or tap a marker from the remote flow): the marker is added with the toast only, no alert interrupts the read. Paused, M opens the name alert. Cancel keeps the default "Marker N".
+74. [ ] **Rename from the list:** in Chapters & Markers, long-press (or right-click on Mac) a marker: Rename and Delete. Swipe left on a marker: Delete and Rename. Rename changes the title in the list. Clearing the name brings back "Marker N: first words".
+75. [ ] **Upgrade data:** a script that had markers from an earlier build still opens with its markers, shown as "Marker N: …" (no crash, no lost markers).
+76. [ ] **Top buttons contrast:** with Black on White (and any light custom background), the five round buttons at the top right (close, keyboard, list, bookmark, back to top) are dark icons on a light grey circle and clearly visible. On White on Black or with the camera on, they are white icons on a faint circle.

@@ -28,6 +28,11 @@ struct PrompterView: View {
     @State private var showChapters = false
     @State private var showHelp = false
     @State private var showRemotePanel = false
+    /// Marker being named right after it was added (main view alert).
+    @State private var renameOffset: Int?
+    /// Marker being renamed from the Chapters & Markers list (alert inside the sheet).
+    @State private var listRenameOffset: Int?
+    @State private var renameText = ""
     @State private var cameraMode = false
     @State private var hud: String?
     @State private var hudTask: Task<Void, Never>?
@@ -80,7 +85,25 @@ struct PrompterView: View {
         let ls = lines
         return Set(markers.map { ScriptOutline.lineIndex(for: $0, in: ls) })
     }
-    private var jumpPoints: [JumpPoint] { ScriptOutline.jumpPoints(lines: lines, markers: markers) }
+    private var jumpPoints: [JumpPoint] {
+        ScriptOutline.jumpPoints(lines: lines, markers: markers, names: script.markerNames ?? [:])
+    }
+
+    /// True when the prompter background is light (e.g. Black on White), so overlay icons go dark.
+    private var isLightBackground: Bool {
+        if cameraMode { return false }
+        let hex = (store.isPro || usingFreePreset) ? backgroundHex : "#000000"
+        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("#") { s.removeFirst() }
+        var value: UInt64 = 0
+        Scanner(string: s).scanHexInt64(&value)
+        let r = Double((value >> 16) & 0xFF) / 255.0
+        let g = Double((value >> 8) & 0xFF) / 255.0
+        let b = Double(value & 0xFF) / 255.0
+        return (0.299 * r + 0.587 * g + 0.114 * b) > 0.6
+    }
+    private var overlayIconColor: Color { isLightBackground ? Color.black.opacity(0.85) : Color.white }
+    private var overlayCircleColor: Color { isLightBackground ? Color.black.opacity(0.10) : Color.white.opacity(0.16) }
 
     var body: some View {
         GeometryReader { geo in
@@ -183,6 +206,15 @@ struct PrompterView: View {
         .sheet(isPresented: $showHelp, onDismiss: { keyboardFocused = true }) {
             helpSheet
         }
+        .alert("Name Marker", isPresented: showRenameAlert) {
+            TextField("Marker name", text: $renameText)
+            Button("Save") {
+                if let offset = renameOffset { script.renameMarker(at: offset, to: renameText) }
+                renameOffset = nil
+                keyboardFocused = true
+            }
+            Button("Cancel", role: .cancel) { renameOffset = nil; keyboardFocused = true }
+        }
         .animation(.easeInOut(duration: 0.2), value: countdown)
         .animation(.easeInOut(duration: 0.2), value: engine.isPlaying)
         .animation(.easeInOut(duration: 0.2), value: hud)
@@ -281,33 +313,31 @@ struct PrompterView: View {
         .allowsHitTesting(false)
     }
 
+    /// Round overlay button whose icon and fill contrast with the prompter background.
+    private func topButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.title3.bold())
+                .foregroundStyle(overlayIconColor)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(overlayCircleColor))
+                .overlay(Circle().strokeBorder(overlayIconColor.opacity(0.25), lineWidth: 1))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
     private var controls: some View {
         VStack {
-            HStack(spacing: 4) {
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark").padding(10)
-                }
-                .accessibilityLabel("Close")
+            HStack(spacing: 8) {
+                topButton("xmark", label: "Close") { dismiss() }
                 Spacer()
-                Button { showHelp = true } label: {
-                    Image(systemName: "keyboard").padding(10)
-                }
-                .accessibilityLabel("Keyboard shortcuts")
-                Button { showChapters = true } label: {
-                    Image(systemName: "list.bullet").padding(10)
-                }
-                .accessibilityLabel("Chapters and markers")
-                Button { addMarker() } label: {
-                    Image(systemName: "bookmark").padding(10)
-                }
-                .accessibilityLabel("Add marker here")
-                Button { engine.reset(); flash("Top") } label: {
-                    Image(systemName: "backward.end.fill").padding(10)
-                }
-                .accessibilityLabel("Back to top")
+                topButton("keyboard", label: "Keyboard shortcuts") { showHelp = true }
+                topButton("list.bullet", label: "Chapters and markers") { showChapters = true }
+                topButton("bookmark", label: "Add marker here") { addMarker() }
+                topButton("backward.end.fill", label: "Back to top") { engine.reset(); flash("Top") }
             }
-            .font(.title3.bold())
-            .foregroundStyle(.white)
             .padding(.horizontal, 16)
             .padding(.top, 50)
 
@@ -467,6 +497,13 @@ struct PrompterView: View {
             }
             .frame(minWidth: 44, minHeight: 44)
             .accessibilityLabel("Colors")
+
+            // Same action as the top bookmark button and the M key.
+            Button { addMarker() } label: {
+                Image(systemName: "bookmark")
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Add marker")
 
             Spacer()
 
@@ -684,6 +721,20 @@ struct PrompterView: View {
                             Button(role: .destructive) { removeMarker(point) } label: {
                                 Label("Delete", systemImage: "trash")
                             }
+                            Button { beginListRename(point) } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+                            .tint(LensGlassColor.accent)
+                        }
+                    }
+                    .contextMenu {
+                        if point.kind == .marker {
+                            Button { beginListRename(point) } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) { removeMarker(point) } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
                     }
                 }
@@ -691,6 +742,14 @@ struct PrompterView: View {
             .scrollContentBackground(.hidden)
             .background(LensGlassBackground())
             .tint(LensGlassColor.accent)
+            .alert("Rename Marker", isPresented: showListRenameAlert) {
+                TextField("Marker name", text: $renameText)
+                Button("Save") {
+                    if let offset = listRenameOffset { script.renameMarker(at: offset, to: renameText) }
+                    listRenameOffset = nil
+                }
+                Button("Cancel", role: .cancel) { listRenameOffset = nil }
+            }
             .navigationTitle("Chapters & Markers")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -834,22 +893,35 @@ struct PrompterView: View {
         let ls = lines
         let idx = currentLineIndex
         guard ls.indices.contains(idx) else { return }
-        let offset = ls[idx].startOffset
-        var current = script.markerOffsets ?? []
-        if current.contains(offset) {
+        guard let offset = script.addMarker(atLineContaining: ls[idx].startOffset) else {
             flash("Marker already here")
             return
         }
-        current.append(offset)
-        current.sort()
-        script.markerOffsets = current
-        let number = (current.firstIndex(of: offset) ?? 0) + 1
-        flash("Marker \(number) added")
+        flash("\(script.defaultMarkerName(for: offset)) added")
+        // Offer a name only while paused, so a live read (M key, remote) is never interrupted.
+        if !engine.isPlaying && countdown == nil {
+            renameText = script.defaultMarkerName(for: offset)
+            renameOffset = offset
+        }
     }
 
     private func removeMarker(_ point: JumpPoint) {
         guard point.kind == .marker, let offset = Int(point.id.dropFirst()) else { return }
-        script.markerOffsets = (script.markerOffsets ?? []).filter { $0 != offset }
+        script.removeMarker(at: offset)
+    }
+
+    private func beginListRename(_ point: JumpPoint) {
+        guard point.kind == .marker, let offset = Int(point.id.dropFirst()) else { return }
+        renameText = script.markerName(for: offset)
+        listRenameOffset = offset
+    }
+
+    private var showRenameAlert: Binding<Bool> {
+        Binding(get: { renameOffset != nil }, set: { if !$0 { renameOffset = nil } })
+    }
+
+    private var showListRenameAlert: Binding<Bool> {
+        Binding(get: { listRenameOffset != nil }, set: { if !$0 { listRenameOffset = nil } })
     }
 
     private func jump(toLine index: Int, label: String) {
