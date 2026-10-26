@@ -28,7 +28,6 @@ enum ScriptImporter {
         if types.isEmpty, let byExt = UTType(filenameExtension: "pages") { types.append(byExt) }
         return types
     }()
-        .map { UTType($0) ?? UTType(importedAs: $0) }
 
     /// Types offered in the file picker.
     static var allowedContentTypes: [UTType] {
