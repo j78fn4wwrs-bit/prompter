@@ -13,6 +13,7 @@ struct PrompterApp: App {
         WindowGroup {
             ScriptListView()
                 .environmentObject(store)
+                .tint(LensGlassColor.accent)
                 .task { await store.start() }
         }
         .modelContainer(for: Script.self)

@@ -57,10 +57,11 @@ struct RemoteControlView: View {
     private var pairingList: some View {
         List {
             Section {
-                Text("On the prompter device, open a script, tap the remote button and turn on Allow Remote (Pro). Then pick it below and type the code it shows.")
+                Text("On the prompter device, open a script, tap Remote and turn on Allow Remote (Pro). Then pick it below and type the code it shows.")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(LensGlassColor.secondaryLabel)
             }
+            .listRowBackground(LensGlassColor.card)
             if let error = client.pairingError {
                 Section { Text(error).foregroundStyle(.red) }
             }
@@ -68,7 +69,7 @@ struct RemoteControlView: View {
                 if client.nearby.isEmpty {
                     HStack(spacing: 10) {
                         ProgressView()
-                        Text("Looking for prompters…").foregroundStyle(.secondary)
+                        Text("Looking for prompters…").foregroundStyle(LensGlassColor.secondaryLabel)
                     }
                 }
                 ForEach(client.nearby) { prompter in
@@ -77,23 +78,28 @@ struct RemoteControlView: View {
                         selected = prompter
                     } label: {
                         HStack {
-                            Image(systemName: "text.alignleft")
-                            Text(prompter.name).foregroundStyle(.primary)
+                            LensGlassIconTile(systemName: "text.alignleft", size: 32, symbolSize: 14)
+                            Text(prompter.name).foregroundStyle(LensGlassColor.label)
                             Spacer()
                             if prompter.name == client.savedHost {
                                 Text(client.status == .connecting ? "Reconnecting…" : "Paired")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.caption).foregroundStyle(LensGlassColor.secondaryLabel)
                             }
                         }
                     }
+                    .listRowBackground(LensGlassColor.card)
                 }
             }
+            .listRowBackground(LensGlassColor.card)
             if client.savedHost != nil {
                 Section {
                     Button("Forget paired prompter", role: .destructive) { client.forgetPairing() }
                 }
+                .listRowBackground(LensGlassColor.card)
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(LensGlassBackground())
     }
 
     private var controlPad: some View {

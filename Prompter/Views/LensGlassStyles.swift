@@ -204,3 +204,88 @@ struct LensRingWatermark: View {
             .accessibilityHidden(true)
     }
 }
+
+// MARK: - App-wide branded surfaces (D1)
+
+/// Soft navy (dark) / pale blue (light) gradient used behind lists, sheets and empty states.
+struct LensGlassBackground: View {
+    var body: some View {
+        LinearGradient(colors: [LensGlassColor.backgroundTop, LensGlassColor.backgroundBottom],
+                       startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea()
+    }
+}
+
+/// Small rounded glass tile holding an SF Symbol (list rows, paywall header, feature rows).
+struct LensGlassIconTile: View {
+    let systemName: String
+    var size: CGFloat = 36
+    var symbolSize: CGFloat = 16
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: symbolSize, weight: .semibold))
+            .foregroundStyle(LensGlassColor.secondaryLabelGlyph)
+            .frame(width: size, height: size)
+            .background {
+                RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                    .fill(LinearGradient(colors: [LensGlassColor.secondaryTop, LensGlassColor.secondaryBottom],
+                                         startPoint: .top, endPoint: .bottom))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                    .strokeBorder(LensGlassColor.rim, lineWidth: 1.5)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// Branded replacement for ContentUnavailableView: lens ring, glass tile, title and message.
+struct LensGlassEmptyState: View {
+    let title: String
+    let systemImage: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                LensRingWatermark()
+                    .scaleEffect(0.5)
+                    .frame(width: 150, height: 150)
+                LensGlassIconTile(systemName: systemImage, size: 72, symbolSize: 32)
+            }
+            Text(title)
+                .font(.title2.bold())
+                .foregroundStyle(LensGlassColor.label)
+                .multilineTextAlignment(.center)
+            Text(message)
+                .font(.body)
+                .foregroundStyle(LensGlassColor.secondaryLabel)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Small capsule chip for meta info ("120 words", "2 chapters").
+struct LensGlassChip: View {
+    let text: String
+    var systemImage: String?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let systemImage {
+                Image(systemName: systemImage).accessibilityHidden(true)
+            }
+            Text(text).lineLimit(1)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(LensGlassColor.label)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(LensGlassColor.yellow.opacity(0.3), in: Capsule())
+    }
+}

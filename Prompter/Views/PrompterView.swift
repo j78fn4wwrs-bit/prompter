@@ -641,6 +641,9 @@ struct PrompterView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(LensGlassBackground())
+            .tint(LensGlassColor.accent)
             .navigationTitle("Colors")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -683,6 +686,9 @@ struct PrompterView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(LensGlassBackground())
+            .tint(LensGlassColor.accent)
             .navigationTitle("Chapters & Markers")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -712,6 +718,9 @@ struct PrompterView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(LensGlassBackground())
+            .tint(LensGlassColor.accent)
             .navigationTitle("Keyboard Shortcuts")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

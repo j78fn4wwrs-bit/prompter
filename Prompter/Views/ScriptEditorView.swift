@@ -14,13 +14,14 @@ struct ScriptEditorView: View {
         VStack(spacing: 0) {
             TextField("Title", text: $script.title)
                 .font(.title2.bold())
+                .foregroundStyle(LensGlassColor.label)
                 .padding(.horizontal)
                 .padding(.top, 8)
-            HStack {
-                Text("\(script.wordCount) words")
+            HStack(spacing: 8) {
+                LensGlassChip(text: "\(script.wordCount) words", systemImage: "text.word.spacing")
                 let chapters = ScriptOutline.lines(script.text).filter { $0.headingLevel > 0 }.count
                 if chapters > 0 {
-                    Text("· \(chapters) chapter\(chapters == 1 ? "" : "s")")
+                    LensGlassChip(text: "\(chapters) chapter\(chapters == 1 ? "" : "s")", systemImage: "bookmark.fill")
                 }
                 Spacer()
                 Button {
@@ -35,15 +36,16 @@ struct ScriptEditorView: View {
                 .buttonStyle(.borderless)
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(LensGlassColor.secondaryLabel)
             .padding(.horizontal)
             .padding(.vertical, 6)
-            Divider()
+            Divider().overlay(LensGlassColor.separator)
             ScriptTextView(text: $script.text, onFileDrop: onFileDrop)
                 .padding(.horizontal, 12)
         }
         .frame(maxWidth: 820)
         .frame(maxWidth: .infinity)
+        .background(LensGlassColor.card.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
