@@ -139,11 +139,21 @@ final class RemoteHost: NSObject, ObservableObject {
     }
 
     /// Sends status to the remote (skips if unchanged).
-    func send(_ state: RemoteState) {
-        guard state != lastState, let session, !session.connectedPeers.isEmpty,
+    /// `force` sends even when unchanged (on connect and after marker edits).
+    func send(_ state: RemoteState, force: Bool = false) {
+        guard force || state != lastState, let session, !session.connectedPeers.isEmpty,
               let data = try? JSONEncoder().encode(RemoteMessage.state(state)) else { return }
         lastState = state
-        try? session.send(data, toPeers: session.connectedPeers, with: .reliable)
+        do {
+            try session.send(data, toPeers: session.connectedPeers, with: .reliable)
+            #if DEBUG
+            print("[Remote host] sent state, markers: \(state.markers?.count ?? -1), current: \(String(describing: state.currentMarkerKey))")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[Remote host] state send failed: \(error)")
+            #endif
+        }
     }
 
     fileprivate func peerChanged(name: String, state: MCSessionState) {
@@ -185,6 +195,9 @@ final class RemoteHost: NSObject, ObservableObject {
     }
 
     fileprivate func received(_ message: RemoteMessage) {
+        #if DEBUG
+        print("[Remote host] received \(message)")
+        #endif
         switch message {
         case .command(let command): commands.send(command)
         case .marker(let command): markerCommands.send(command)
@@ -227,7 +240,12 @@ extension RemoteHost: MCSessionDelegate {
     }
 
     nonisolated func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
-        guard let message = try? JSONDecoder().decode(RemoteMessage.self, from: data) else { return }
+        guard let message = try? JSONDecoder().decode(RemoteMessage.self, from: data) else {
+            #if DEBUG
+            print("[Remote link] could not decode \(data.count) bytes: \(String(data: data, encoding: .utf8) ?? "?")")
+            #endif
+            return
+        }
         Task { @MainActor in self.received(message) }
     }
 
@@ -299,15 +317,32 @@ final class RemoteClient: NSObject, ObservableObject {
     }
 
     func send(_ command: RemoteCommand) {
-        guard let session, let peer = connectedPeer,
-              let data = try? JSONEncoder().encode(RemoteMessage.command(command)) else { return }
-        try? session.send(data, toPeers: [peer], with: .reliable)
+        sendMessage(.command(command))
     }
 
     func send(marker command: RemoteMarkerCommand) {
-        guard let session, let peer = connectedPeer,
-              let data = try? JSONEncoder().encode(RemoteMessage.marker(command)) else { return }
-        try? session.send(data, toPeers: [peer], with: .reliable)
+        sendMessage(.marker(command))
+    }
+
+    /// One send path for every message, so marker commands go exactly the way Play/Pause does.
+    private func sendMessage(_ message: RemoteMessage) {
+        guard let session, let peer = connectedPeer else {
+            #if DEBUG
+            print("[Remote] not connected, dropped \(message)")
+            #endif
+            return
+        }
+        do {
+            let data = try JSONEncoder().encode(message)
+            try session.send(data, toPeers: [peer], with: .reliable)
+            #if DEBUG
+            print("[Remote] sent \(message)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[Remote] send failed for \(message): \(error)")
+            #endif
+        }
     }
 
     private func invite(_ peer: MCPeerID, invite: RemoteInvite, usedCode: Bool) {
@@ -380,7 +415,12 @@ final class RemoteClient: NSObject, ObservableObject {
     }
 
     fileprivate func received(_ message: RemoteMessage) {
-        if case .state(let s) = message { state = s }
+        if case .state(let s) = message {
+            state = s
+            #if DEBUG
+            print("[Remote] received state, markers: \(s.markers?.count ?? -1) (-1 = prompter build without markers)")
+            #endif
+        }
     }
 }
 
@@ -407,7 +447,12 @@ extension RemoteClient: MCSessionDelegate {
     }
 
     nonisolated func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
-        guard let message = try? JSONDecoder().decode(RemoteMessage.self, from: data) else { return }
+        guard let message = try? JSONDecoder().decode(RemoteMessage.self, from: data) else {
+            #if DEBUG
+            print("[Remote link] could not decode \(data.count) bytes: \(String(data: data, encoding: .utf8) ?? "?")")
+            #endif
+            return
+        }
         Task { @MainActor in self.received(message) }
     }
 

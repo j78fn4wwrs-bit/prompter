@@ -157,7 +157,6 @@ struct RemoteControlView: View {
                         .labelStyle(.titleAndIcon)
                 }
                 .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 18))
-                .disabled(client.state?.markers == nil)
                 .accessibilityLabel("Markers list")
                 padButton("Top", icon: "backward.end.fill", role: .utility, fontSize: 18, command: .resetToTop)
                     .accessibilityLabel("Back to Top")
@@ -221,6 +220,10 @@ struct RemoteControlView: View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             client.send(marker: command)
+            if client.state?.markers == nil {
+                // The prompter never sent a marker list: it is running a build without remote markers.
+                showMarkers = true
+            }
         } label: {
             Label(title, systemImage: icon)
                 .labelStyle(.titleAndIcon)
@@ -235,7 +238,7 @@ struct RemoteControlView: View {
                 let markers = client.state?.markers ?? []
                 if markers.isEmpty {
                     Text(client.state?.markers == nil
-                         ? "Update the app on the prompter to see markers here."
+                         ? "The prompter isn't sending markers. Update Steady Prompter on the prompter device (run the latest build there), then reconnect."
                          : "No markers yet. Tap Marker to add one at the reading line.")
                         .foregroundStyle(LensGlassColor.secondaryLabel)
                         .listRowBackground(LensGlassColor.card)

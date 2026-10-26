@@ -176,8 +176,18 @@ struct PrompterView: View {
             if remote.status == .connected { sendRemoteState() }
         }
         .onChange(of: remote.status) { _, newStatus in
-            if newStatus == .connected { sendRemoteState() }
+            if newStatus == .connected {
+                sendRemoteState(force: true)
+                // Line positions may not be measured yet right after connecting; send again shortly.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(600))
+                    sendRemoteState(force: true)
+                }
+            }
         }
+        .onChange(of: script.markerOffsets) { _, _ in sendRemoteState(force: true) }
+        .onChange(of: script.markerNames) { _, _ in sendRemoteState(force: true) }
+        .onChange(of: script.markerTimecodes) { _, _ in sendRemoteState(force: true) }
         .onChange(of: store.isPro) { _, nowPro in
             if !nowPro { remote.stop() }
         }
@@ -1088,9 +1098,11 @@ struct PrompterView: View {
         case .jump(let key):
             if let point = markerPoints.first(where: { $0.id == "m\(key)" }) {
                 jump(toLine: point.lineIndex, label: point.title)
+            } else {
+                flash("Marker not found")
             }
         }
-        sendRemoteState()
+        sendRemoteState(force: true)
     }
 
     private var remoteMarkers: [RemoteMarker] {
@@ -1120,12 +1132,12 @@ struct PrompterView: View {
         return points.last(where: { (lineTops[$0.lineIndex] ?? .greatestFiniteMagnitude) <= here })?.title
     }
 
-    private func sendRemoteState() {
+    private func sendRemoteState(force: Bool = false) {
         guard remote.status == .connected else { return }
         let currentKey = currentMarkerID.flatMap { Int($0.dropFirst()) }
         remote.send(RemoteState(isPlaying: engine.isPlaying || countdown != nil, speed: speed,
                                 markerTitle: currentPointTitle,
-                                markers: remoteMarkers, currentMarkerKey: currentKey))
+                                markers: remoteMarkers, currentMarkerKey: currentKey), force: force)
     }
 
     /// Runs a keyboard action if Pro (keyboard control is a Pro feature), otherwise explains.

@@ -146,3 +146,10 @@ Needs both devices on this build (Pro on the prompter, Allow Remote on).
 92. [ ] **Remote markers list:** tap "Markers (N)": each marker shows its name and timecode on the right (set timecode in bold digits, or the estimate as grey italic "~0:12"). The current one is highlighted. Tap a row: the prompter jumps there and the highlight follows. Rename/timecode changes made on the prompter show up within about a second.
 93. [ ] **Mixed versions:** an older prompter build still works with the new remote's Play/Speed/Back/Forward buttons; Markers says "Update the app on the prompter to see markers here".
 94. [ ] **Fit:** on the smallest iPhone, the connected pad (Play, Slower/Faster, Back/Forward, Prev/Marker/Next, Markers/Top) fits without scrolling in both looks.
+
+## v1.1 Remote markers fix
+
+95. [ ] **Markers sheet always opens:** connected, tap "Markers (N)": the sheet opens every time. With no markers it says "No markers yet". If the prompter runs an older build it says the prompter isn't sending markers and to update it (also shown if you tap Prev/Marker/Next in that case).
+96. [ ] **List right after connecting:** with markers already in the script, connect the remote: "Markers (N)" shows the right count within a second, without touching anything on the prompter.
+97. [ ] **Instant updates:** add, rename, retime or delete a marker on the prompter: the remote list updates right away.
+98. [ ] **Debug log (Xcode console, Debug builds only):** tapping Marker on the phone logs "[Remote] sent marker(...)", and the prompter's console logs "[Remote host] received marker(...)" and "[Remote host] sent state, markers: N". "markers: -1" on the phone means the prompter build is old.
