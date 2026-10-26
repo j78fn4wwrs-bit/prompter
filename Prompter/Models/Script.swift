@@ -93,6 +93,49 @@ final class Script {
         return (Double(words) / max(wordsPerMinute, 1)) * 60.0
     }
 
+    /// Replaces the text and keeps markers (with names and timecodes) near the same words.
+    /// Uses the common prefix/suffix of old and new text: markers before the change stay,
+    /// markers after it shift by the length difference, markers inside it move to the change start.
+    /// Each marker then snaps to the start of its line; two markers landing on one line merge.
+    func replaceText(with newText: String) {
+        let old = Array(text)
+        let new = Array(newText)
+        var prefix = 0
+        while prefix < old.count && prefix < new.count && old[prefix] == new[prefix] { prefix += 1 }
+        var suffix = 0
+        while suffix < old.count - prefix && suffix < new.count - prefix
+                && old[old.count - 1 - suffix] == new[new.count - 1 - suffix] { suffix += 1 }
+        let delta = new.count - old.count
+        let oldChangeEnd = old.count - suffix
+
+        let newLines = ScriptOutline.lines(newText)
+        var newOffsets: [Int] = []
+        var newNames: [String: String] = [:]
+        var newTimes: [String: Double] = [:]
+        for m in (markerOffsets ?? []).sorted() {
+            var moved: Int
+            if m < prefix {
+                moved = m
+            } else if m >= oldChangeEnd {
+                moved = m + delta
+            } else {
+                moved = prefix
+            }
+            moved = min(max(0, moved), max(0, new.count))
+            let li = ScriptOutline.lineIndex(for: moved, in: newLines)
+            let snapped = newLines.indices.contains(li) ? newLines[li].startOffset : 0
+            if newOffsets.contains(snapped) { continue }
+            newOffsets.append(snapped)
+            if let name = markerNames?[String(m)] { newNames[String(snapped)] = name }
+            if let time = markerTimecodes?[String(m)] { newTimes[String(snapped)] = time }
+        }
+        text = newText
+        updatedAt = Date()
+        markerOffsets = newOffsets.isEmpty ? nil : newOffsets.sorted()
+        markerNames = newNames.isEmpty ? nil : newNames
+        markerTimecodes = newTimes.isEmpty ? nil : newTimes
+    }
+
     var wordCount: Int {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
     }

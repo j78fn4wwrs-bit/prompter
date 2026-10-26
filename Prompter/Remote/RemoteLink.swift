@@ -26,6 +26,38 @@ enum RemoteMarkerCommand: Codable, Sendable, Equatable {
     case jump(key: Int)
 }
 
+/// Moving through the script from the remote. The host applies these only while paused.
+enum RemoteNavCommand: Codable, Sendable, Equatable {
+    /// Positive = further down the script, in remote points (the host scales it).
+    case scrub(points: Double)
+    case lineUp, lineDown, pageUp, pageDown
+}
+
+/// Full script text sent to the remote on request (never in the 1/s state).
+struct RemoteScript: Codable, Sendable, Equatable {
+    var title: String
+    var text: String
+    var revision: Int
+}
+
+/// Edited text from the remote, based on the revision it loaded.
+struct RemoteScriptUpdate: Codable, Sendable, Equatable {
+    var text: String
+    var baseRevision: Int
+}
+
+/// Host's answer to a script request or update.
+struct RemoteScriptResult: Codable, Sendable, Equatable {
+    enum Kind: String, Codable, Sendable { case saved, conflict, playing, tooLarge }
+    var kind: Kind
+    var revision: Int
+}
+
+enum RemoteLimits {
+    /// Keep script messages well under what MultipeerConnectivity handles comfortably.
+    static let maxScriptBytes = 1_000_000
+}
+
 /// One marker as the remote shows it.
 struct RemoteMarker: Codable, Sendable, Equatable, Identifiable {
     var key: Int
@@ -45,12 +77,19 @@ struct RemoteState: Codable, Sendable, Equatable {
     /// Optional so older remotes/hosts that don't send or expect them still decode.
     var markers: [RemoteMarker]? = nil
     var currentMarkerKey: Int? = nil
+    /// Script revision on the host, bumped on every text change (nil from older hosts).
+    var scriptRevision: Int? = nil
 }
 
 enum RemoteMessage: Codable, Sendable {
     case command(RemoteCommand)
     case state(RemoteState)
     case marker(RemoteMarkerCommand)
+    case nav(RemoteNavCommand)
+    case scriptRequest
+    case script(RemoteScript)
+    case scriptUpdate(RemoteScriptUpdate)
+    case scriptResult(RemoteScriptResult)
 }
 
 /// Sent as the invitation context. Either the 4-digit code (first pairing)
@@ -105,6 +144,8 @@ final class RemoteHost: NSObject, ObservableObject {
     /// Commands from the remote, delivered on the main actor.
     let commands = PassthroughSubject<RemoteCommand, Never>()
     let markerCommands = PassthroughSubject<RemoteMarkerCommand, Never>()
+    /// Navigation and script-editing messages from the remote.
+    let scriptMessages = PassthroughSubject<RemoteMessage, Never>()
 
     private let peerID = MCPeerID(displayName: UIDevice.current.name)
     private var session: MCSession?
@@ -196,12 +237,33 @@ final class RemoteHost: NSObject, ObservableObject {
 
     fileprivate func received(_ message: RemoteMessage) {
         #if DEBUG
-        print("[Remote host] received \(message)")
+        if case .scriptUpdate(let u) = message {
+            print("[Remote host] received script update, base rev \(u.baseRevision), \(u.text.count) characters")
+        } else {
+            print("[Remote host] received \(message)")
+        }
         #endif
         switch message {
         case .command(let command): commands.send(command)
         case .marker(let command): markerCommands.send(command)
-        case .state: break
+        case .nav, .scriptRequest, .scriptUpdate: scriptMessages.send(message)
+        case .state, .script, .scriptResult: break
+        }
+    }
+
+    /// Sends a one-off message (script text, script results) to the connected remote.
+    func send(message: RemoteMessage) {
+        guard let session, !session.connectedPeers.isEmpty else { return }
+        do {
+            let data = try JSONEncoder().encode(message)
+            try session.send(data, toPeers: session.connectedPeers, with: .reliable)
+            #if DEBUG
+            print("[Remote host] sent message, \(data.count) bytes")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[Remote host] message send failed: \(error)")
+            #endif
         }
     }
 
@@ -269,6 +331,9 @@ final class RemoteClient: NSObject, ObservableObject {
     @Published private(set) var hostName: String?
     @Published private(set) var state: RemoteState?
     @Published var pairingError: String?
+    /// Latest script text received from the host (for the remote editor).
+    @Published var script: RemoteScript?
+    @Published var scriptResult: RemoteScriptResult?
 
     private let peerID = MCPeerID(displayName: UIDevice.current.name)
     private var session: MCSession?
@@ -324,6 +389,21 @@ final class RemoteClient: NSObject, ObservableObject {
         sendMessage(.marker(command))
     }
 
+    func send(nav command: RemoteNavCommand) {
+        sendMessage(.nav(command))
+    }
+
+    func requestScript() {
+        script = nil
+        scriptResult = nil
+        sendMessage(.scriptRequest)
+    }
+
+    func sendScriptUpdate(_ update: RemoteScriptUpdate) {
+        scriptResult = nil
+        sendMessage(.scriptUpdate(update))
+    }
+
     /// One send path for every message, so marker commands go exactly the way Play/Pause does.
     private func sendMessage(_ message: RemoteMessage) {
         guard let session, let peer = connectedPeer else {
@@ -336,7 +416,7 @@ final class RemoteClient: NSObject, ObservableObject {
             let data = try JSONEncoder().encode(message)
             try session.send(data, toPeers: [peer], with: .reliable)
             #if DEBUG
-            print("[Remote] sent \(message)")
+            if case .scriptUpdate = message { print("[Remote] sent script update, \(data.count) bytes") } else { print("[Remote] sent \(message)") }
             #endif
         } catch {
             #if DEBUG
@@ -415,11 +495,24 @@ final class RemoteClient: NSObject, ObservableObject {
     }
 
     fileprivate func received(_ message: RemoteMessage) {
-        if case .state(let s) = message {
+        switch message {
+        case .state(let s):
             state = s
             #if DEBUG
             print("[Remote] received state, markers: \(s.markers?.count ?? -1) (-1 = prompter build without markers)")
             #endif
+        case .script(let s):
+            script = s
+            #if DEBUG
+            print("[Remote] received script rev \(s.revision), \(s.text.count) characters")
+            #endif
+        case .scriptResult(let r):
+            scriptResult = r
+            #if DEBUG
+            print("[Remote] script result \(r.kind.rawValue), rev \(r.revision)")
+            #endif
+        default:
+            break
         }
     }
 }

@@ -8,6 +8,8 @@ struct RemoteControlView: View {
     @State private var selected: NearbyPrompter?
     @State private var code = ""
     @State private var showMarkers = false
+    @State private var showNavigate = false
+    @State private var showEditor = false
     /// Remote look: Dark (navy, white, yellow) by default, or Light. Independent of the system setting.
     @AppStorage("remote.appearanceDark") private var darkAppearance: Bool = true
 
@@ -40,6 +42,14 @@ struct RemoteControlView: View {
             }
             .sheet(isPresented: $showMarkers) {
                 markersSheet
+                    .preferredColorScheme(darkAppearance ? .dark : .light)
+            }
+            .fullScreenCover(isPresented: $showNavigate) {
+                RemoteNavigateView(client: client) { showNavigate = false }
+                    .preferredColorScheme(darkAppearance ? .dark : .light)
+            }
+            .fullScreenCover(isPresented: $showEditor) {
+                RemoteScriptEditorView(client: client) { showEditor = false }
                     .preferredColorScheme(darkAppearance ? .dark : .light)
             }
         }
@@ -162,6 +172,27 @@ struct RemoteControlView: View {
                     .accessibilityLabel("Back to Top")
             }
             .frame(minHeight: 50, maxHeight: 62)
+
+            // Paused only: the host ignores these while playing.
+            HStack(spacing: 10) {
+                Button { showNavigate = true } label: {
+                    Label("Navigate", systemImage: "arrow.up.and.down")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(LensGlassButtonStyle(role: .secondary, fontSize: 18))
+                Button { showEditor = true } label: {
+                    Label("Edit Script", systemImage: "square.and.pencil")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(LensGlassButtonStyle(role: .secondary, fontSize: 18))
+            }
+            .disabled(playing)
+            .frame(minHeight: 50, maxHeight: 62)
+            if playing {
+                Text("Pause to navigate or edit the script")
+                    .font(.footnote)
+                    .foregroundStyle(LensGlassColor.secondaryLabel)
+            }
 
             Spacer(minLength: 0)
         }

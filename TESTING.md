@@ -153,3 +153,16 @@ Needs both devices on this build (Pro on the prompter, Allow Remote on).
 96. [ ] **List right after connecting:** with markers already in the script, connect the remote: "Markers (N)" shows the right count within a second, without touching anything on the prompter.
 97. [ ] **Instant updates:** add, rename, retime or delete a marker on the prompter: the remote list updates right away.
 98. [ ] **Debug log (Xcode console, Debug builds only):** tapping Marker on the phone logs "[Remote] sent marker(...)", and the prompter's console logs "[Remote host] received marker(...)" and "[Remote host] sent state, markers: N". "markers: -1" on the phone means the prompter build is old.
+
+## v1.1 Navigate and edit from the remote
+
+Both devices on this build; the prompter paused unless a step says otherwise. Check in both remote looks (sun/moon).
+
+99. [ ] **Navigate button:** on the remote pad, tap Navigate: a full-screen panel with a big glass strip and Line Up / Line Down / Page Up / Page Down. Drag a finger up on the strip: the prompter text moves down through the script smoothly and keeps up with your finger; drag down to go back. It stops at the top and the end.
+100. [ ] **Line / Page:** Line Up/Down move about one line, Page Up/Down about most of a screen, and the remote's current marker follows.
+101. [ ] **Paused only:** start playing from the remote: Navigate and Edit Script grey out with "Pause to navigate or edit the script". If the Navigate panel is open, a yellow banner says the prompter is playing and the controls are disabled. A nav command that arrives while playing shows "Pause to move through the script" on the prompter and does nothing.
+102. [ ] **Edit Script:** tap Edit Script: "Loading script…" then the full text in an editor. Change a word and Save: the remote closes the editor, the prompter shows "Script updated from remote", the new text appears near the same spot, and the list/markers update on the remote.
+103. [ ] **Markers survive edits:** with markers after the edited spot, they still sit on the same lines (with their names and timecodes). Deleting a whole marked paragraph moves that marker to the start of the change (two on one line merge into one).
+104. [ ] **Conflict:** open Edit Script on the remote, then change the script on the prompter (or add text via another edit). Save on the remote: "Script changed on the prompter" with Reload / Keep Editing. Reload loads the latest text.
+105. [ ] **Playing while editing:** with the editor open, start playing on the prompter: a banner appears and Save is disabled until it's paused again. Cancel never changes the script.
+106. [ ] **No answer:** with an older prompter build, Save shows "No answer from the prompter…" after about 5 seconds instead of spinning forever.

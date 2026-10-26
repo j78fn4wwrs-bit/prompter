@@ -34,6 +34,8 @@ struct PrompterView: View {
     /// Marker being renamed from the Chapters & Markers list (alert inside the sheet).
     @State private var listRenameOffset: Int?
     @State private var renameText = ""
+    /// Bumped on every text change, so a remote edit based on old text is refused.
+    @State private var scriptRevision = 0
     @State private var cameraMode = false
     @State private var hud: String?
     @State private var hudTask: Task<Void, Never>?
@@ -172,6 +174,11 @@ struct PrompterView: View {
         }
         .onReceive(remote.commands) { command in handleRemote(command) }
         .onReceive(remote.markerCommands) { command in handleRemoteMarker(command) }
+        .onReceive(remote.scriptMessages) { message in handleRemoteScript(message) }
+        .onChange(of: script.text) { _, _ in
+            scriptRevision += 1
+            sendRemoteState(force: true)
+        }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             if remote.status == .connected { sendRemoteState() }
         }
@@ -1105,6 +1112,64 @@ struct PrompterView: View {
         sendRemoteState(force: true)
     }
 
+    private var isPausedForRemote: Bool { !engine.isPlaying && countdown == nil }
+
+    private func handleRemoteScript(_ message: RemoteMessage) {
+        switch message {
+        case .nav(let command):
+            guard isPausedForRemote else { flash("Pause to move through the script"); return }
+            let line = scaledFont * 1.3
+            let page = max(line * 3, UIScreen.main.bounds.height * 0.6)
+            switch command {
+            // Same rule as the drag gesture: offset clamped to 0...maxOffset.
+            case .scrub(let points): engine.nudge(by: CGFloat(points) * 2)
+            case .lineDown: engine.nudge(by: line)
+            case .lineUp: engine.nudge(by: -line)
+            case .pageDown: engine.nudge(by: page)
+            case .pageUp: engine.nudge(by: -page)
+            }
+            sendRemoteState()
+        case .scriptRequest:
+            let payload = RemoteScript(title: script.title, text: script.text, revision: scriptRevision)
+            if script.text.utf8.count > RemoteLimits.maxScriptBytes {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .tooLarge, revision: scriptRevision)))
+            } else {
+                remote.send(message: .script(payload))
+            }
+        case .scriptUpdate(let update):
+            guard isPausedForRemote else {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .playing, revision: scriptRevision)))
+                return
+            }
+            guard update.baseRevision == scriptRevision else {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .conflict, revision: scriptRevision)))
+                return
+            }
+            guard update.text.utf8.count <= RemoteLimits.maxScriptBytes else {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .tooLarge, revision: scriptRevision)))
+                return
+            }
+            if update.text == script.text {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .saved, revision: scriptRevision)))
+                return
+            }
+            // Keep roughly the same place: same fraction of the script.
+            let fraction = engine.maxOffset > 0 ? engine.offset / engine.maxOffset : 0
+            script.replaceText(with: update.text)
+            // onChange(of: script.text) bumps the revision on the next update; report the new one.
+            let newRevision = scriptRevision + 1
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                engine.offset = min(max(0, fraction * engine.maxOffset), engine.maxOffset)
+                sendRemoteState(force: true)
+            }
+            remote.send(message: .scriptResult(RemoteScriptResult(kind: .saved, revision: newRevision)))
+            flash("Script updated from remote")
+        default:
+            break
+        }
+    }
+
     private var remoteMarkers: [RemoteMarker] {
         markerPoints.compactMap { point in
             guard let key = Int(point.id.dropFirst()) else { return nil }
@@ -1137,7 +1202,8 @@ struct PrompterView: View {
         let currentKey = currentMarkerID.flatMap { Int($0.dropFirst()) }
         remote.send(RemoteState(isPlaying: engine.isPlaying || countdown != nil, speed: speed,
                                 markerTitle: currentPointTitle,
-                                markers: remoteMarkers, currentMarkerKey: currentKey), force: force)
+                                markers: remoteMarkers, currentMarkerKey: currentKey,
+                                scriptRevision: scriptRevision), force: force)
     }
 
     /// Runs a keyboard action if Pro (keyboard control is a Pro feature), otherwise explains.
