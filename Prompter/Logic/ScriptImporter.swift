@@ -20,7 +20,13 @@ enum ScriptImporter {
 
     static let docxType = UTType("org.openxmlformats.wordprocessingml.document") ?? UTType(importedAs: "org.openxmlformats.wordprocessingml.document")
     static let docType = UTType("com.microsoft.word.doc") ?? UTType(importedAs: "com.microsoft.word.doc")
-    static let pagesTypes: [UTType] = ["com.apple.iwork.pages.sec.pages", "com.apple.iwork.pages.pages"]
+    // Failable lookups: Pages types are declared by the system when Pages is
+    // installed, so we don't import-declare them (avoids an Info.plist warning).
+    static let pagesTypes: [UTType] = {
+        var types = ["com.apple.iwork.pages.sec.pages", "com.apple.iwork.pages.pages"].compactMap { UTType($0) }
+        if types.isEmpty, let byExt = UTType(filenameExtension: "pages") { types.append(byExt) }
+        return types
+    }()
         .map { UTType($0) ?? UTType(importedAs: $0) }
 
     /// Types offered in the file picker.
