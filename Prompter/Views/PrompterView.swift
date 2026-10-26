@@ -27,6 +27,7 @@ struct PrompterView: View {
     @State private var showColors = false
     @State private var showChapters = false
     @State private var showHelp = false
+    @State private var showRemotePanel = false
     @State private var cameraMode = false
     @State private var hud: String?
     @State private var hudTask: Task<Void, Never>?
@@ -319,78 +320,235 @@ struct PrompterView: View {
                     .background(.black.opacity(0.6), in: Capsule())
             }
 
-            VStack(spacing: 14) {
-                HStack {
-                    Image(systemName: "tortoise.fill")
-                    Slider(value: $speed, in: 10...300)
-                    Image(systemName: "hare.fill")
-                }
-                HStack {
-                    Image(systemName: "textformat.size.smaller")
-                    // Left = smaller, right = bigger. The value is the point size.
-                    Slider(value: fontBinding, in: fontRange)
-                    Image(systemName: "textformat.size.larger")
-                }
-                HStack(spacing: 22) {
-                    Toggle(isOn: $mirror) {
-                        Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
-                    }
-                    .toggleStyle(.button)
-                    .accessibilityLabel("Mirror")
-
-                    proButton(icon: cameraMode ? "video.fill" : "video", active: cameraMode, feature: .camera) {
-                        cameraMode.toggle()
-                        if cameraMode { camera.prepare() } else { camera.stopSession() }
-                    }
-                    .accessibilityLabel("Camera")
-                    proButton(icon: "appletvremote.gen4", active: remote.isRunning, feature: .remote) {
-                        allowRemote.toggle()
-                        if allowRemote {
-                            remote.start()
-                        } else {
-                            remote.stop()
-                            remote.forgetPairedRemote()
-                        }
-                    }
-                    .accessibilityLabel(remote.isRunning ? "Allow Remote: on" : "Allow Remote: off")
-                    // Colors: basic presets are free, custom colors are Pro (inside the sheet).
-                    Button { showColors = true } label: {
-                        Image(systemName: "paintpalette")
-                    }
-                    .accessibilityLabel("Colors")
-
-                    Spacer()
-
-                    Button { togglePlay() } label: {
-                        Image(systemName: cameraMode ? "record.circle" : "play.circle.fill")
-                            .font(.system(size: 44))
-                            .foregroundStyle(cameraMode ? Color.red : Color.white)
-                    }
-                }
-                .font(.title2)
-                if remote.hasPairedRemote {
-                    Button(role: .destructive) {
-                        remote.forgetPairedRemote()
-                    } label: {
-                        Label("Forget paired remote", systemImage: "xmark.circle")
-                            .font(.subheadline)
-                    }
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                Text("Tap anywhere to start or pause. Drag to move. ⌘/ for keyboard shortcuts.")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-            .tint(.white)
-            .foregroundStyle(.white)
-            .padding(16)
-            .frame(maxWidth: 640)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-            .environment(\.colorScheme, .dark)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 30)
+            controlBar
+                .padding(.horizontal, 12)
+                .padding(.bottom, 30)
         }
+    }
+
+    // MARK: Lens Glass control bar (D1)
+
+    private var controlBar: some View {
+        VStack(spacing: 14) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 20) {
+                    transportControls
+                    speedControls
+                }
+                VStack(spacing: 14) {
+                    transportControls
+                    speedControls
+                }
+            }
+            fontSizeRow
+            toolRow
+            if remote.hasPairedRemote {
+                Button(role: .destructive) {
+                    remote.forgetPairedRemote()
+                } label: {
+                    Label("Forget paired remote", systemImage: "xmark.circle")
+                        .font(.subheadline)
+                }
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Text("Tap anywhere to start or pause. Drag to move. ⌘/ for keyboard shortcuts.")
+                .font(.caption2)
+                .foregroundStyle(LensGlassColor.secondaryLabel)
+        }
+        .tint(LensGlassColor.yellow)
+        .foregroundStyle(LensGlassColor.label)
+        .padding(18)
+        .frame(maxWidth: 760)
+        .background(controlBarBackground)
+    }
+
+    private var controlBarBackground: some View {
+        RoundedRectangle(cornerRadius: 30, style: .continuous)
+            .fill(LensGlassColor.card.opacity(0.94))
+            .overlay {
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .strokeBorder(LensGlassColor.separator, lineWidth: 1.5)
+            }
+    }
+
+    private var transportControls: some View {
+        HStack(spacing: 12) {
+            Button { jumpRelative(-1) } label: {
+                Image(systemName: "backward.fill")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .secondary, fontSize: 20, horizontalPadding: 0))
+            .frame(width: 60, height: 60)
+            .accessibilityLabel("Back")
+
+            Button { togglePlay() } label: {
+                Image(systemName: cameraMode ? "record.circle" : (engine.isPlaying ? "pause.fill" : "play.fill"))
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .primary, fontSize: 28, horizontalPadding: 0))
+            .frame(width: 72, height: 72)
+            .accessibilityLabel(cameraMode ? "Record" : (engine.isPlaying ? "Pause" : "Play"))
+
+            Button { jumpRelative(1) } label: {
+                Image(systemName: "forward.fill")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .secondary, fontSize: 20, horizontalPadding: 0))
+            .frame(width: 60, height: 60)
+            .accessibilityLabel("Forward")
+        }
+    }
+
+    private var speedControls: some View {
+        HStack(spacing: 10) {
+            Button { changeSpeed(by: -10) } label: {
+                Image(systemName: "minus")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 18, horizontalPadding: 0))
+            .frame(width: 48, height: 48)
+            .accessibilityLabel("Slower")
+
+            Image(systemName: "gauge.with.needle")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(LensGlassColor.secondaryLabel)
+                .accessibilityHidden(true)
+            Slider(value: $speed, in: 10...300)
+                .frame(minWidth: 60, maxWidth: 300)
+                .accessibilityLabel("Speed")
+                .accessibilityValue(String(format: "%.1f", speed / 20))
+            Text(String(format: "%.1f", speed / 20))
+                .font(.system(size: 22, weight: .bold).monospacedDigit())
+                .foregroundStyle(LensGlassColor.label)
+                .frame(minWidth: 52, alignment: .trailing)
+                .accessibilityHidden(true)
+
+            Button { changeSpeed(by: 10) } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 18, horizontalPadding: 0))
+            .frame(width: 48, height: 48)
+            .accessibilityLabel("Faster")
+        }
+    }
+
+    private var fontSizeRow: some View {
+        HStack {
+            Image(systemName: "textformat.size.smaller")
+                .accessibilityHidden(true)
+            // Left = smaller, right = bigger. The value is the point size.
+            Slider(value: fontBinding, in: fontRange)
+                .accessibilityLabel("Text size")
+            Image(systemName: "textformat.size.larger")
+                .accessibilityHidden(true)
+        }
+        .font(.title3)
+        .foregroundStyle(LensGlassColor.secondaryLabel)
+    }
+
+    private var toolRow: some View {
+        HStack(spacing: 12) {
+            Toggle(isOn: $mirror) {
+                Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+            }
+            .toggleStyle(.button)
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Mirror")
+
+            proButton(icon: cameraMode ? "video.fill" : "video", active: cameraMode, feature: .camera) {
+                cameraMode.toggle()
+                if cameraMode { camera.prepare() } else { camera.stopSession() }
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Camera")
+
+            // Colors: basic presets are free, custom colors are Pro (inside the sheet).
+            Button { showColors = true } label: {
+                Image(systemName: "paintpalette")
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Colors")
+
+            Spacer()
+
+            remoteButton
+        }
+        .font(.title2)
+    }
+
+    private var remoteButton: some View {
+        Button {
+            if store.isPro { showRemotePanel = true } else { paywallFeature = .remote }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "iphone.radiowaves.left.and.right")
+                Text("Remote")
+                if !store.isPro {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 12, weight: .bold))
+                }
+            }
+        }
+        .buttonStyle(LensGlassButtonStyle(role: .secondary, isActive: remote.status == .connected,
+                                          fontSize: 18, horizontalPadding: 16))
+        .frame(width: 180, height: 52)
+        .accessibilityLabel(remote.isRunning ? "Remote, Allow Remote: on" : "Remote, Allow Remote: off")
+        .popover(isPresented: $showRemotePanel, arrowEdge: .bottom) {
+            remotePanel
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private var allowRemoteBinding: Binding<Bool> {
+        Binding(
+            get: { allowRemote },
+            set: { on in
+                allowRemote = on
+                if on {
+                    remote.start()
+                } else {
+                    remote.stop()
+                    remote.forgetPairedRemote()
+                }
+            }
+        )
+    }
+
+    private var remoteSubtitle: String {
+        if !remote.isRunning { return "\(UIDevice.current.name) · off" }
+        if remote.status == .connected { return "Connected to your remote" }
+        return "\(UIDevice.current.name) · ready to pair · code \(remote.code)"
+    }
+
+    private var remotePanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Toggle(isOn: allowRemoteBinding) {
+                HStack(spacing: 10) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .foregroundStyle(LensGlassColor.accent)
+                        .accessibilityHidden(true)
+                    Text("Allow Remote")
+                        .font(.system(size: 22, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+            .toggleStyle(LensGlassToggleStyle())
+
+            Text(remoteSubtitle)
+                .font(.system(size: 15))
+                .foregroundStyle(LensGlassColor.secondaryLabel)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().overlay(LensGlassColor.separator)
+
+            Button { showRemotePanel = false } label: {
+                Label("Done", systemImage: "checkmark")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 17))
+            .frame(height: 44)
+        }
+        .foregroundStyle(LensGlassColor.label)
+        .padding(24)
+        .frame(width: min(400, max(280, viewWidth - 32)))
+        .background(LensGlassColor.card)
     }
 
     /// Top-left pill: pairing code while waiting, connected/disconnected otherwise.
@@ -428,7 +586,7 @@ struct PrompterView: View {
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: icon)
-                    .foregroundStyle(active ? Color.red : Color.white)
+                    .foregroundStyle(active ? Color.red : LensGlassColor.label)
                 if !store.isPro {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 10))

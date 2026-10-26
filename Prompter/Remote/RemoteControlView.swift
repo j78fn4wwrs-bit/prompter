@@ -17,11 +17,12 @@ struct RemoteControlView: View {
                     pairingList
                 }
             }
-            .navigationTitle("Remote Control")
+            .navigationTitle("Remote")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { dismiss() }
+                        .tint(LensGlassColor.accent)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     RemoteStatusBadge(status: client.status)
@@ -96,61 +97,94 @@ struct RemoteControlView: View {
     }
 
     private var controlPad: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 4) {
-                Text(client.hostName ?? "Prompter")
-                    .font(.headline)
-                if let state = client.state {
-                    Text(state.isPlaying ? "Playing" : "Paused")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(state.isPlaying ? .green : .orange)
-                    Text(String(format: "Speed %.1f", state.speed / 20))
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                    if let title = state.markerTitle {
-                        Label(title, systemImage: "bookmark.fill")
-                            .font(.subheadline)
-                            .lineLimit(1)
-                            .foregroundStyle(.orange)
-                    }
-                }
+        let playing = client.state?.isPlaying == true
+        return VStack(spacing: 14) {
+            padHeader
+                .padding(.top, 8)
+
+            padButton(playing ? "Pause" : "Play",
+                      icon: playing ? "pause.fill" : "play.fill",
+                      role: .primary, fontSize: 34, command: .playPause)
+                .frame(minHeight: 72, maxHeight: 112)
+
+            HStack(spacing: 14) {
+                padButton("Slower", icon: "tortoise.fill", role: .secondary, fontSize: 24, command: .speedDown)
+                padButton("Faster", icon: "hare.fill", role: .secondary, fontSize: 24, command: .speedUp)
             }
-            .padding(.top, 8)
+            .frame(minHeight: 60, maxHeight: 92)
 
-            bigButton(client.state?.isPlaying == true ? "Pause" : "Play",
-                      icon: client.state?.isPlaying == true ? "pause.fill" : "play.fill",
-                      tint: .green, command: .playPause)
-                .frame(maxHeight: .infinity)
-
-            HStack(spacing: 16) {
-                bigButton("Slower", icon: "tortoise.fill", tint: .blue, command: .speedDown)
-                bigButton("Faster", icon: "hare.fill", tint: .blue, command: .speedUp)
+            HStack(spacing: 14) {
+                padButton("Back", icon: "backward.fill", role: .secondary, fontSize: 24, command: .jumpBack)
+                padButton("Forward", icon: "forward.fill", role: .secondary, fontSize: 24, command: .jumpForward)
             }
-            .frame(maxHeight: .infinity)
+            .frame(minHeight: 60, maxHeight: 92)
 
-            HStack(spacing: 16) {
-                bigButton("Back", icon: "backward.fill", tint: .orange, command: .jumpBack)
-                bigButton("Forward", icon: "forward.fill", tint: .orange, command: .jumpForward)
-            }
-            .frame(maxHeight: .infinity)
+            padButton("Back to Top", icon: "backward.end.fill", role: .utility, fontSize: 22, command: .resetToTop)
+                .frame(minHeight: 50, maxHeight: 66)
 
-            bigButton("Back to Top", icon: "backward.end.fill", tint: .gray, command: .resetToTop)
-                .frame(height: 64)
+            Spacer(minLength: 0)
         }
-        .padding()
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(padBackground)
     }
 
-    private func bigButton(_ title: String, icon: String, tint: Color, command: RemoteCommand) -> some View {
+    private var padBackground: some View {
+        LinearGradient(colors: [LensGlassColor.backgroundTop, LensGlassColor.backgroundBottom],
+                       startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea()
+    }
+
+    private var padHeader: some View {
+        ZStack {
+            LensRingWatermark()
+            VStack(spacing: 8) {
+                Text(client.hostName ?? "Prompter")
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundStyle(LensGlassColor.label)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if let state = client.state {
+                    stateDetails(state)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func stateDetails(_ state: RemoteState) -> some View {
+        Text(state.isPlaying ? "PLAYING" : "PAUSED")
+            .font(.system(size: 14, weight: .bold))
+            .tracking(0.5)
+            .foregroundStyle(LensGlassColor.label)
+            .padding(.horizontal, 12)
+            .frame(height: 26)
+            .background(LensGlassColor.yellow.opacity(0.3), in: Capsule())
+            .accessibilityLabel(state.isPlaying ? "Playing" : "Paused")
+        Label(String(format: "Speed %.1f", state.speed / 20), systemImage: "gauge.with.needle")
+            .font(.system(size: 19, weight: .semibold).monospacedDigit())
+            .foregroundStyle(LensGlassColor.secondaryLabel)
+        if let title = state.markerTitle {
+            Label(title, systemImage: "bookmark.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .lineLimit(1)
+                .foregroundStyle(LensGlassColor.label)
+        }
+    }
+
+    private func padButton(_ title: String, icon: String, role: LensGlassRole,
+                           fontSize: CGFloat, command: RemoteCommand) -> some View {
         Button {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             client.send(command)
         } label: {
             Label(title, systemImage: icon)
-                .font(.title2.bold())
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .labelStyle(.titleAndIcon)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(tint)
+        .buttonStyle(LensGlassButtonStyle(role: role, fontSize: fontSize))
         .accessibilityLabel(title)
     }
 }
