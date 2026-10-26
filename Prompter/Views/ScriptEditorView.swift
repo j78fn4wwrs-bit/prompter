@@ -120,14 +120,11 @@ struct ScriptEditorView: View {
             PrompterView(script: script)
                 .environmentObject(store)
         }
-        .alert("Name Marker", isPresented: Binding(get: { renameOffset != nil && !showMarkerSheet },
-                                                   set: { if !$0 { renameOffset = nil } })) {
-            TextField("Marker name", text: $renameText)
-            Button("Save") {
-                if let offset = renameOffset { script.renameMarker(at: offset, to: renameText) }
-                renameOffset = nil
+        .sheet(isPresented: Binding(get: { renameOffset != nil && !showMarkerSheet },
+                                    set: { if !$0 { renameOffset = nil } })) {
+            if let offset = renameOffset {
+                MarkerEditSheet(script: script, offset: offset) { renameOffset = nil }
             }
-            Button("Cancel", role: .cancel) { renameOffset = nil }
         }
         .sheet(isPresented: $showMarkerSheet) {
             NavigationStack {
@@ -153,20 +150,34 @@ struct ScriptEditorView: View {
     private var markerList: some View {
         List {
             ForEach(markerPoints) { point in
-                Button { goTo(point) } label: {
-                    HStack {
-                        Image(systemName: "bookmark.fill").foregroundStyle(.orange)
-                        Text(point.title).foregroundStyle(.primary).lineLimit(2)
-                        Spacer()
+                HStack(spacing: 8) {
+                    Button { goTo(point) } label: {
+                        HStack {
+                            Image(systemName: "bookmark.fill").foregroundStyle(.orange)
+                            Text(point.title).foregroundStyle(.primary).lineLimit(2)
+                            Spacer()
+                            if let offset = markerOffset(of: point) {
+                                MarkerTimeText(script: script, offset: offset)
+                            }
+                        }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    Button { beginRename(point) } label: {
+                        Image(systemName: "pencil.circle")
+                            .font(.title3)
+                            .foregroundStyle(LensGlassColor.accent)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Edit marker")
                 }
                 .contextMenu {
-                    Button { beginRename(point) } label: { Label("Rename", systemImage: "pencil") }
+                    Button { beginRename(point) } label: { Label("Edit Marker", systemImage: "pencil") }
                     Button(role: .destructive) { deleteMarker(point) } label: { Label("Delete", systemImage: "trash") }
                 }
                 .swipeActions {
                     Button(role: .destructive) { deleteMarker(point) } label: { Label("Delete", systemImage: "trash") }
-                    Button { beginRename(point) } label: { Label("Rename", systemImage: "pencil") }
+                    Button { beginRename(point) } label: { Label("Edit", systemImage: "pencil") }
                         .tint(LensGlassColor.accent)
                 }
             }
@@ -174,14 +185,11 @@ struct ScriptEditorView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .tint(LensGlassColor.accent)
-        .alert("Rename Marker", isPresented: Binding(get: { renameOffset != nil && showMarkerSheet },
-                                                     set: { if !$0 { renameOffset = nil } })) {
-            TextField("Marker name", text: $renameText)
-            Button("Save") {
-                if let offset = renameOffset { script.renameMarker(at: offset, to: renameText) }
-                renameOffset = nil
+        .sheet(isPresented: Binding(get: { renameOffset != nil && showMarkerSheet },
+                                    set: { if !$0 { renameOffset = nil } })) {
+            if let offset = renameOffset {
+                MarkerEditSheet(script: script, offset: offset) { renameOffset = nil }
             }
-            Button("Cancel", role: .cancel) { renameOffset = nil }
         }
     }
 

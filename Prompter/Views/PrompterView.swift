@@ -210,14 +210,10 @@ struct PrompterView: View {
         .sheet(isPresented: $showHelp, onDismiss: { keyboardFocused = true }) {
             helpSheet
         }
-        .alert("Name Marker", isPresented: showRenameAlert) {
-            TextField("Marker name", text: $renameText)
-            Button("Save") {
-                if let offset = renameOffset { script.renameMarker(at: offset, to: renameText) }
-                renameOffset = nil
-                keyboardFocused = true
+        .sheet(isPresented: showRenameAlert, onDismiss: { keyboardFocused = true }) {
+            if let offset = renameOffset {
+                MarkerEditSheet(script: script, offset: offset) { renameOffset = nil }
             }
-            Button("Cancel", role: .cancel) { renameOffset = nil; keyboardFocused = true }
         }
         .animation(.easeInOut(duration: 0.2), value: countdown)
         .animation(.easeInOut(duration: 0.2), value: engine.isPlaying)
@@ -355,6 +351,9 @@ struct PrompterView: View {
                                         .multilineTextAlignment(.leading)
                                         .foregroundStyle(overlayIconColor)
                                     Spacer(minLength: 0)
+                                    if let offset = Int(point.id.dropFirst()) {
+                                        MarkerTimeText(script: script, offset: offset, color: overlayIconColor)
+                                    }
                                 }
                                 .font(.footnote.weight(isCurrent ? .bold : .regular))
                                 .padding(.horizontal, 8)
@@ -368,7 +367,7 @@ struct PrompterView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button { beginRailRename(point) } label: {
-                                    Label("Rename", systemImage: "pencil")
+                                    Label("Edit Marker", systemImage: "pencil")
                                 }
                                 Button(role: .destructive) { removeMarker(point) } label: {
                                     Label("Delete", systemImage: "trash")
@@ -796,6 +795,9 @@ struct PrompterView: View {
                                 .foregroundStyle(.orange)
                             Text(point.title).foregroundStyle(.primary).lineLimit(2)
                             Spacer()
+                            if point.kind == .marker, let offset = Int(point.id.dropFirst()) {
+                                MarkerTimeText(script: script, offset: offset)
+                            }
                             if index < 9 {
                                 Text("\(index + 1)").font(.caption.monospaced()).foregroundStyle(.secondary)
                             }
@@ -807,7 +809,7 @@ struct PrompterView: View {
                                 Label("Delete", systemImage: "trash")
                             }
                             Button { beginListRename(point) } label: {
-                                Label("Rename", systemImage: "pencil")
+                                Label("Edit", systemImage: "pencil")
                             }
                             .tint(LensGlassColor.accent)
                         }
@@ -815,7 +817,7 @@ struct PrompterView: View {
                     .contextMenu {
                         if point.kind == .marker {
                             Button { beginListRename(point) } label: {
-                                Label("Rename", systemImage: "pencil")
+                                Label("Edit Marker", systemImage: "pencil")
                             }
                             Button(role: .destructive) { removeMarker(point) } label: {
                                 Label("Delete", systemImage: "trash")
@@ -827,13 +829,10 @@ struct PrompterView: View {
             .scrollContentBackground(.hidden)
             .background(LensGlassBackground())
             .tint(LensGlassColor.accent)
-            .alert("Rename Marker", isPresented: showListRenameAlert) {
-                TextField("Marker name", text: $renameText)
-                Button("Save") {
-                    if let offset = listRenameOffset { script.renameMarker(at: offset, to: renameText) }
-                    listRenameOffset = nil
+            .sheet(isPresented: showListRenameAlert) {
+                if let offset = listRenameOffset {
+                    MarkerEditSheet(script: script, offset: offset) { listRenameOffset = nil }
                 }
-                Button("Cancel", role: .cancel) { listRenameOffset = nil }
             }
             .navigationTitle("Chapters & Markers")
             .navigationBarTitleDisplayMode(.inline)

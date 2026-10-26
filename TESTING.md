@@ -125,3 +125,12 @@ Check each on iPhone, iPad and Mac (Designed for iPad), in Light and Dark mode. 
 74. [ ] **Rename from the list:** in Chapters & Markers, long-press (or right-click on Mac) a marker: Rename and Delete. Swipe left on a marker: Delete and Rename. Rename changes the title in the list. Clearing the name brings back "Marker N: first words".
 75. [ ] **Upgrade data:** a script that had markers from an earlier build still opens with its markers, shown as "Marker N: …" (no crash, no lost markers).
 76. [ ] **Top buttons contrast:** with Black on White (and any light custom background), the five round buttons at the top right (close, keyboard, list, bookmark, back to top) are dark icons on a light grey circle and clearly visible. On White on Black or with the camera on, they are white icons on a faint circle.
+
+## v1.1 Edit Marker (label + timecode)
+
+82. [ ] **Edit sheet opens everywhere:** open "Edit Marker" from: the pencil on an editor panel row (Mac/iPad), the pencil or swipe "Edit" in the iPhone Markers sheet, long-press "Edit Marker" in the prompter side panel, and swipe "Edit" / long-press "Edit Marker" in Chapters & Markers. Adding a new marker (editor button, control-panel bookmark, top bookmark, or M while paused) also opens it. Tapping a row itself still jumps.
+83. [ ] **Label:** change the label and Save: every list shows the new name. Clear it and Save: it goes back to "Marker N: first words". Cancel changes nothing.
+84. [ ] **Timecode:** type `1:05` and Save: rows show `1:05` right-aligned in even-width digits. `1:02:30` shows as `1:02:30`. `1:75`, `abc` or `1::2` show a red hint and Save is disabled. Clear the field and Save: the timecode is removed.
+85. [ ] **Use estimated time:** tap it: the field fills with the estimate shown on the button (words before the marker at 150 words per minute, same pace as the "~0:37 read" chip). Markers without a timecode show that estimate as grey italic "~0:12" in every list.
+86. [ ] **Delete in the sheet:** Delete Marker removes it from all lists and its timecode is gone (re-adding a marker on that line starts with no timecode or name).
+87. [ ] **Old data:** scripts from earlier builds open with markers intact and no timecodes (estimates shown).

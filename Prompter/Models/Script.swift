@@ -13,6 +13,8 @@ final class Script {
     /// Custom marker names, keyed by the marker's offset as a string ("120" -> "Intro take 2").
     /// Unnamed markers show as "Marker N". Optional so existing stores migrate (lightweight).
     var markerNames: [String: String]? = nil
+    /// Marker timecodes in seconds, keyed like `markerNames`. Optional so existing stores migrate.
+    var markerTimecodes: [String: Double]? = nil
 
     init(title: String, text: String) {
         self.title = title
@@ -68,6 +70,27 @@ final class Script {
             names[String(offset)] = nil
             markerNames = names.isEmpty ? nil : names
         }
+        if var times = markerTimecodes {
+            times[String(offset)] = nil
+            markerTimecodes = times.isEmpty ? nil : times
+        }
+    }
+
+    /// The timecode the user set for a marker, in seconds.
+    func markerTimecode(for offset: Int) -> Double? { markerTimecodes?[String(offset)] }
+
+    /// nil clears the timecode.
+    func setMarkerTimecode(_ seconds: Double?, for offset: Int) {
+        var times = markerTimecodes ?? [:]
+        times[String(offset)] = seconds.map { max(0, $0) }
+        markerTimecodes = times.isEmpty ? nil : times
+    }
+
+    /// Estimated time at the marker: words before it at the same pace as the "~0:37 read" estimate.
+    func estimatedSeconds(for offset: Int, wordsPerMinute: Double = 150) -> Double {
+        let prefix = String(text.prefix(max(0, offset)))
+        let words = prefix.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        return (Double(words) / max(wordsPerMinute, 1)) * 60.0
     }
 
     var wordCount: Int {
