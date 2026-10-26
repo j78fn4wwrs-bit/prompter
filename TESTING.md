@@ -8,7 +8,7 @@ Build: `cd ~/prompter && git pull && xcodegen`, then Cmd+R on your iPhone.
 4. [ ] Speed and font-size controls change scrolling/text live; pause/resume works.
 5. [ ] Mirror mode flips the text horizontally.
 6. [ ] Rotate to landscape: layout still works.
-7. [ ] Pro features show the $19.99 upgrade sheet; price reads $19.99.
+7. [ ] Pro features show the $119.99 upgrade sheet; price reads $119.99.
 8. [ ] Buy Pro (Xcode test mode, free): Pro unlocks, sheet closes. Restore Purchases also works, both in the sheet and from the gear menu (top left) on the script list.
 9. [ ] Camera recording: allow camera + mic, record while reading, video saves to Photos (allow access).
 10. [ ] Bluetooth clicker / keyboard (space or arrows) controls scrolling.
@@ -111,7 +111,7 @@ Check each on iPhone, iPad and Mac (Designed for iPad), in Light and Dark mode. 
 63. [ ] **Empty states:** delete all scripts: "No scripts yet" with a glass tile and faint lens ring. On iPad/Mac with no script selected: "Pick a script" in the same style. Dropping a file on either still creates a script.
 64. [ ] **Editor:** title in bold, then yellow chips "N words" and (if any) "N chapters", then the Read time button. Type `# Intro` on a line: that line turns bold and navy (Light) / yellow (Dark) right away; `#Intro` (no space) stays plain. Typing, cursor position, undo and drag-and-drop work as before, and the prompter still shows the chapter.
 65. [ ] **Settings (gear menu) and alerts:** the menu, Restore Purchase alert, "Nothing to Paste" and "Couldn't Import File" alerts use the brand tint and read clearly in both modes.
-66. [ ] **Paywall:** gradient background with a card, glass icon tiles for the header and each feature. "Unlock Pro for $9.99" is a big yellow glass button with dark text, readable in both modes; it dims while busy. Restore Purchase, Privacy Policy and Terms links work. After unlocking, "Pro is unlocked" shows in green.
+66. [ ] **Paywall:** gradient background with a card, glass icon tiles for the header and each feature. "Unlock Pro for $19.99" is a big yellow glass button with dark text, readable in both modes; it dims while busy. Restore Purchase, Privacy Policy and Terms links work. After unlocking, "Pro is unlocked" shows in green.
 67. [ ] **Remote pairing list (iPhone):** gradient background, card rows, glass tile next to each nearby prompter, "Paired"/"Reconnecting…" text readable. Code entry alert and "Forget paired prompter" work as before.
 68. [ ] **Prompter sheets:** Colors, Chapters & Markers and Keyboard Shortcuts sheets show the gradient background behind their rows, in both modes.
 69. [ ] Prompter with a keyboard (Pro): add 2–3 markers with M. Tab jumps to the next marker, Shift-Tab to the previous one. Chapters (#) are skipped. With no markers, Tab shows "No markers yet". At the last marker it shows "Last marker"; Shift-Tab before the first goes to the top. The ⌘/ help lists Tab / Shift-Tab.
