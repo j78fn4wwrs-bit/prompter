@@ -707,6 +707,7 @@ struct PrompterView: View {
                     shortcutRow("↑ / ↓", "Speed up / slow down")
                     shortcutRow("⌘+ (or ⌘=) / ⌘−", "Bigger / smaller text")
                     shortcutRow("M", "Add a marker at the reading line")
+                    shortcutRow("Tab / Shift-Tab", "Next / previous marker")
                     shortcutRow("← / → or [ / ]", "Previous / next chapter or marker")
                     shortcutRow("1 – 9", "Jump to chapter or marker N")
                     shortcutRow("Home or ⌘↑", "Back to top")
@@ -862,15 +863,15 @@ struct PrompterView: View {
         flash("Top")
     }
 
-    private func jumpRelative(_ direction: Int) {
-        let points = jumpPoints
-        guard !points.isEmpty else { flash("No chapters or markers"); return }
+    private func jumpRelative(_ direction: Int, markersOnly: Bool = false) {
+        let points = markersOnly ? jumpPoints.filter { $0.kind == .marker } : jumpPoints
+        guard !points.isEmpty else { flash(markersOnly ? "No markers yet. Press M to add one" : "No chapters or markers"); return }
         let here = engine.offset
         let tops = points.map { lineTops[$0.lineIndex] ?? 0 }
         if direction > 0 {
             if let i = tops.firstIndex(where: { $0 > here + 2 }) {
                 jump(toLine: points[i].lineIndex, label: points[i].title)
-            } else { flash("Last chapter") }
+            } else { flash(markersOnly ? "Last marker" : "Last chapter") }
         } else {
             if let i = tops.lastIndex(where: { $0 < here - 2 }) {
                 jump(toLine: points[i].lineIndex, label: points[i].title)
@@ -966,6 +967,9 @@ struct PrompterView: View {
         case .downArrow: action = { changeSpeed(by: -10) }
         case .leftArrow: action = { jumpRelative(-1) }
         case .rightArrow: action = { jumpRelative(1) }
+        case .tab:
+            let back = press.modifiers.contains(.shift)
+            action = { jumpRelative(back ? -1 : 1, markersOnly: true) }
         case .pageDown: action = { engine.nudge(by: step) }
         case .pageUp: action = { engine.nudge(by: -step) }
         case .home: action = { jumpToTop() }
