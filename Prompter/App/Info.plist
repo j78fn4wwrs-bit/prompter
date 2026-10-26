@@ -22,5 +22,20 @@
 	<key>NSCameraUsageDescription</key><string>Steady Prompter uses the front camera to record you while you read your script.</string>
 	<key>NSMicrophoneUsageDescription</key><string>Steady Prompter records your voice along with the video while you read your script.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key><string>Steady Prompter saves your finished recordings to your Photos library.</string>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.apple.iwork.pages.sec.pages</string>
+			<key>UTTypeDescription</key><string>Pages Document</string>
+			<key>UTTypeConformsTo</key><array><string>public.data</string><string>public.composite-content</string></array>
+			<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>pages</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.apple.iwork.pages.pages</string>
+			<key>UTTypeDescription</key><string>Pages Package</string>
+			<key>UTTypeConformsTo</key><array><string>com.apple.package</string><string>public.composite-content</string></array>
+			<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>pages</string></array></dict>
+		</dict>
+	</array>
 </dict>
 </plist>
