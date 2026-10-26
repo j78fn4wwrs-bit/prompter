@@ -8,7 +8,7 @@ Build: `cd ~/prompter && git pull && xcodegen`, then Cmd+R on your iPhone.
 4. [ ] Speed and font-size controls change scrolling/text live; pause/resume works.
 5. [ ] Mirror mode flips the text horizontally.
 6. [ ] Rotate to landscape: layout still works.
-7. [ ] Pro features show the $119.99 upgrade sheet; price reads $119.99.
+7. [ ] Pro features show the $19.99 upgrade sheet; price reads $19.99.
 8. [ ] Buy Pro (Xcode test mode, free): Pro unlocks, sheet closes. Restore Purchases also works, both in the sheet and from the gear menu (top left) on the script list.
 9. [ ] Camera recording: allow camera + mic, record while reading, video saves to Photos (allow access).
 10. [ ] Bluetooth clicker / keyboard (space or arrows) controls scrolling.
