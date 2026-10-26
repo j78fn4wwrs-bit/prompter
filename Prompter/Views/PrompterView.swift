@@ -97,8 +97,10 @@ struct PrompterView: View {
                 if let countdown {
                     Text("\(countdown)")
                         .font(.system(size: 140, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .shadow(radius: 8)
+                        // Match the script text color so it always contrasts with the
+                        // background: dark numbers on light themes, light on dark.
+                        .foregroundStyle(textColor)
+                        .shadow(color: backgroundColor.opacity(0.6), radius: 8)
                         .transition(.scale.combined(with: .opacity))
                         .id(countdown)
                         .allowsHitTesting(false)
