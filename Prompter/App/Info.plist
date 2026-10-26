@@ -24,5 +24,20 @@
 	<key>NSPhotoLibraryAddUsageDescription</key><string>Steady Prompter saves your finished recordings to your Photos library.</string>
 	<key>NSLocalNetworkUsageDescription</key><string>Steady Prompter uses your local network to connect a remote control device nearby.</string>
 	<key>NSBonjourServices</key><array><string>_steadyprompt._tcp</string><string>_steadyprompt._udp</string></array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.apple.iwork.pages.sec.pages</string>
+			<key>UTTypeDescription</key><string>Pages Document</string>
+			<key>UTTypeConformsTo</key><array><string>public.data</string><string>public.composite-content</string></array>
+			<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>pages</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.apple.iwork.pages.pages</string>
+			<key>UTTypeDescription</key><string>Pages Package</string>
+			<key>UTTypeConformsTo</key><array><string>com.apple.package</string><string>public.composite-content</string></array>
+			<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>pages</string></array></dict>
+		</dict>
+	</array>
 </dict>
 </plist>
