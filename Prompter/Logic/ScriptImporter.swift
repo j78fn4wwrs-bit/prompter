@@ -23,7 +23,8 @@ enum ScriptImporter {
     // Failable lookups: Pages types are declared by the system when Pages is
     // installed, so we don't import-declare them (avoids an Info.plist warning).
     static let pagesTypes: [UTType] = {
-        var types = ["com.apple.iwork.pages.sec.pages", "com.apple.iwork.pages.pages"].compactMap { UTType($0) }
+        let identifiers: [String] = ["com.apple.iwork.pages.sec.pages", "com.apple.iwork.pages.pages"]
+        var types: [UTType] = identifiers.compactMap { UTType($0) }
         if types.isEmpty, let byExt = UTType(filenameExtension: "pages") { types.append(byExt) }
         return types
     }()
