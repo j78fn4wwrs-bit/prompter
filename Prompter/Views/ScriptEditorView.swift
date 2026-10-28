@@ -51,30 +51,39 @@ struct ScriptEditorView: View {
                     .accessibilityLabel("\(markerCount) markers, show list")
                 }
                 Button { addMarkerAtCursor() } label: {
-                    Label("Add Marker", systemImage: "bookmark")
+                    if isWide {
+                        Label("Add Marker", systemImage: "bookmark")
+                    } else {
+                        // iPhone: icon-only so the row (and Read time) fits on one line.
+                        Label("Add Marker", systemImage: "bookmark").labelStyle(.iconOnly)
+                    }
                 }
                 .buttonStyle(LensGlassButtonStyle(role: .secondary, fontSize: 14, horizontalPadding: 12))
                 .fixedSize()
                 .accessibilityLabel("Add marker at cursor")
                 if let markerNote {
                     Text(markerNote).foregroundStyle(LensGlassColor.secondaryLabel)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
-                Spacer()
-                Button {
-                    if !store.isPro { paywallFeature = .readTime }
-                } label: {
-                    if store.isPro {
-                        Label("~\(script.readTime()) read", systemImage: "clock")
-                    } else {
-                        Label("Read time", systemImage: "lock.fill")
-                    }
-                }
-                .buttonStyle(.borderless)
+                Spacer(minLength: 0)
+                if isWide { readTimeButton }
             }
             .font(.caption)
             .foregroundStyle(LensGlassColor.secondaryLabel)
             .padding(.horizontal)
             .padding(.vertical, 6)
+            if !isWide {
+                // iPhone: Read time gets its own line so it never wraps into a letter column.
+                HStack {
+                    readTimeButton
+                    Spacer(minLength: 0)
+                }
+                .font(.caption)
+                .foregroundStyle(LensGlassColor.secondaryLabel)
+                .padding(.horizontal)
+                .padding(.bottom, 6)
+            }
             Divider().overlay(LensGlassColor.separator)
             ScriptTextView(text: $script.text, onFileDrop: onFileDrop,
                            onCursorChange: { cursorOffset = $0 },
@@ -145,6 +154,21 @@ struct ScriptEditorView: View {
             onFileDrop(providers)
             return true
         }
+    }
+
+    private var readTimeButton: some View {
+        Button {
+            if !store.isPro { paywallFeature = .readTime }
+        } label: {
+            if store.isPro {
+                Label("~\(script.readTime()) read", systemImage: "clock")
+            } else {
+                Label("Read time", systemImage: "lock.fill")
+            }
+        }
+        .buttonStyle(.borderless)
+        .lineLimit(1)
+        .fixedSize()
     }
 
     private var markerList: some View {

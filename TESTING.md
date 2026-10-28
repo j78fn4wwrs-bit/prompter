@@ -166,3 +166,15 @@ Both devices on this build; the prompter paused unless a step says otherwise. Ch
 104. [ ] **Conflict:** open Edit Script on the remote, then change the script on the prompter (or add text via another edit). Save on the remote: "Script changed on the prompter" with Reload / Keep Editing. Reload loads the latest text.
 105. [ ] **Playing while editing:** with the editor open, start playing on the prompter: a banner appears and Save is disabled until it's paused again. Cancel never changes the script.
 106. [ ] **No answer:** with an older prompter build, Save shows "No answer from the prompter…" after about 5 seconds instead of spinning forever.
+
+## iPhone layout (compact width / compact height)
+
+107. iPhone portrait, script editor: the toolbar row shows word count, markers chip and an icon-only Add Marker (bookmark) button. "Read time" (or "~N min read" on Pro) sits on its own line below, on one line, never as a vertical column of letters.
+108. iPad and Mac editor: unchanged. Add Marker keeps its label and Read time stays at the right of the same row.
+109. iPhone portrait, prompter paused: the top row shows Close (left) and Chapters/Markers list, Add Marker, and a "…" button (right), all fully visible below the Dynamic Island. "…" opens Back to Top and Keyboard Shortcuts.
+110. iPhone portrait: the bottom control panel fits inside the screen with margins on both sides and above the home indicator. Speed row shows −, slider, value (e.g. 3.0) and + all visible. Remote is an icon-only button at the right of the tool row (with lock on Free) and opens the Remote panel / paywall.
+111. iPhone portrait: no marker rail on the right edge. Tap the list button to see and jump to markers.
+112. iPhone landscape, prompter paused (script with markers): the Markers panel sits to the right of the control panel, never on top of it. +, speed value and Remote are all visible and tappable. Nothing is under the camera housing side.
+113. iPhone landscape: "…" > Hide Markers Panel hides it; Show Markers Panel brings it back. Tapping a marker in the panel jumps to it.
+114. Rotate portrait ↔ landscape while paused: layout switches cleanly, no clipping. Press play: all controls hide as before.
+115. iPad (portrait and landscape) and Mac (Designed for iPad): prompter top buttons, control panel, Remote button label and marker rail look exactly as before.

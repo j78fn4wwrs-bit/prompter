@@ -41,6 +41,8 @@ struct PrompterView: View {
     @State private var hudTask: Task<Void, Never>?
     @State private var viewWidth: CGFloat = 400
     @FocusState private var keyboardFocused: Bool
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     /// Only used for the reading-line arrow, not for text size.
     @State private var layoutScale: CGFloat = 1
 
@@ -54,6 +56,12 @@ struct PrompterView: View {
     // line by line so no single layer gets huge.
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    /// iPhone-style layout: compact width (portrait) or compact height (landscape).
+    /// iPad and Mac are regular/regular, so they keep the original layout.
+    private var isCompactLayout: Bool { horizontalSizeClass == .compact || verticalSizeClass == .compact }
+    private var isCompactWidth: Bool { horizontalSizeClass == .compact }
+    private var isCompactHeight: Bool { verticalSizeClass == .compact }
+    private var showsControls: Bool { showControls && !engine.isPlaying && countdown == nil }
     private var fontRange: ClosedRange<Double> {
         let base: ClosedRange<Double> = isPad ? 24...120 : 20...80
         // Keep ~6+ average characters per line even in Slide Over / narrow windows.
@@ -131,7 +139,7 @@ struct PrompterView: View {
                         .id(countdown)
                         .allowsHitTesting(false)
                 }
-                if showControls && !engine.isPlaying && countdown == nil {
+                if showsControls && !isCompactLayout {
                     controls
                     if showMarkerRail && !markerPoints.isEmpty {
                         markerRail(height: geo.size.height)
@@ -157,6 +165,14 @@ struct PrompterView: View {
             }
         }
         .ignoresSafeArea()
+        // iPhone: controls sit in an overlay that respects the safe area (Dynamic Island,
+        // home indicator, landscape notch side), so nothing is cut off at the edges.
+        .overlay {
+            if showsControls && isCompactLayout {
+                compactControls
+                    .transition(.opacity)
+            }
+        }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .background { commandShortcuts }
@@ -346,10 +362,20 @@ struct PrompterView: View {
     /// Slim markers list on the right edge. Only shown while paused (with the other controls),
     /// so it never covers the text during a read. It is not mirrored, like the other controls.
     private func markerRail(height: CGFloat) -> some View {
-        let current = currentMarkerID
-        return HStack {
+        HStack {
             Spacer()
-            VStack(alignment: .leading, spacing: 6) {
+            markerPanel(maxHeight: height * 0.4, width: min(220, viewWidth * 0.32))
+                .padding(.trailing, 12)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.top, 110)
+        .transition(.opacity)
+    }
+
+    /// The boxed markers list used by the rail (iPad/Mac) and beside the control panel (iPhone landscape).
+    private func markerPanel(maxHeight: CGFloat, width: CGFloat) -> some View {
+        let current = currentMarkerID
+        return VStack(alignment: .leading, spacing: 6) {
                 Text("Markers")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(overlayIconColor.opacity(0.7))
@@ -397,33 +423,92 @@ struct PrompterView: View {
                 }
             }
             .padding(8)
-            .frame(width: min(220, viewWidth * 0.32))
-            .frame(maxHeight: height * 0.4)
+            .frame(width: width)
+            .frame(maxHeight: maxHeight)
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(isLightBackground ? Color.white.opacity(0.85) : Color.black.opacity(0.55))
             )
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(overlayIconColor.opacity(0.2), lineWidth: 1))
-            .padding(.trailing, 12)
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .padding(.top, 110)
-        .transition(.opacity)
     }
 
     /// Round overlay button whose icon and fill contrast with the prompter background.
     private func topButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.title3.bold())
-                .foregroundStyle(overlayIconColor)
-                .frame(width: 44, height: 44)
-                .background(Circle().fill(overlayCircleColor))
-                .overlay(Circle().strokeBorder(overlayIconColor.opacity(0.25), lineWidth: 1))
-                .contentShape(Circle())
+            topButtonFace(icon)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+
+    private func topButtonFace(_ icon: String) -> some View {
+        Image(systemName: icon)
+            .font(.title3.bold())
+            .foregroundStyle(overlayIconColor)
+            .frame(width: 44, height: 44)
+            .background(Circle().fill(overlayCircleColor))
+            .overlay(Circle().strokeBorder(overlayIconColor.opacity(0.25), lineWidth: 1))
+            .contentShape(Circle())
+    }
+
+    // MARK: iPhone (compact) layout
+
+    /// iPhone controls. Laid out inside the safe area. Top row keeps Close, Markers list and
+    /// Add Marker visible; the less-used buttons live in a "…" menu. In portrait the marker rail
+    /// is hidden (the list button opens Chapters & Markers); in landscape the markers panel sits
+    /// beside the control panel so it never covers the speed controls.
+    private var compactControls: some View {
+        GeometryReader { geo in
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    topButton("xmark", label: "Close") { dismiss() }
+                    Spacer(minLength: 0)
+                    topButton("list.bullet", label: "Chapters and markers") { showChapters = true }
+                    topButton("bookmark", label: "Add marker here") { addMarker() }
+                    Menu {
+                        Button { engine.reset(); flash("Top") } label: {
+                            Label("Back to Top", systemImage: "backward.end.fill")
+                        }
+                        if isCompactHeight && !markerPoints.isEmpty {
+                            Button { showMarkerRail.toggle() } label: {
+                                Label(showMarkerRail ? "Hide Markers Panel" : "Show Markers Panel",
+                                      systemImage: "sidebar.right")
+                            }
+                        }
+                        Button { showHelp = true } label: {
+                            Label("Keyboard Shortcuts", systemImage: "keyboard")
+                        }
+                    } label: {
+                        topButtonFace("ellipsis")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More")
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+
+                Spacer(minLength: 0)
+                    .allowsHitTesting(false)
+
+                if let message = camera.statusMessage {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.black.opacity(0.6), in: Capsule())
+                }
+
+                HStack(alignment: .bottom, spacing: 10) {
+                    controlBar
+                    if isCompactHeight && showMarkerRail && !markerPoints.isEmpty {
+                        markerPanel(maxHeight: max(120, geo.size.height - 70), width: 200)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
     }
 
     private var controls: some View {
@@ -463,7 +548,7 @@ struct PrompterView: View {
     // MARK: Lens Glass control bar (D1)
 
     private var controlBar: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: isCompactLayout ? 10 : 14) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 20) {
                     transportControls
@@ -486,13 +571,15 @@ struct PrompterView: View {
                 .foregroundStyle(.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text("Tap anywhere to start or pause. Drag to move. ⌘/ for keyboard shortcuts.")
-                .font(.caption2)
-                .foregroundStyle(LensGlassColor.secondaryLabel)
+            if !isCompactLayout {
+                Text("Tap anywhere to start or pause. Drag to move. ⌘/ for keyboard shortcuts.")
+                    .font(.caption2)
+                    .foregroundStyle(LensGlassColor.secondaryLabel)
+            }
         }
         .tint(LensGlassColor.yellow)
         .foregroundStyle(LensGlassColor.label)
-        .padding(18)
+        .padding(isCompactLayout ? 14 : 18)
         .frame(maxWidth: 760)
         .background(controlBarBackground)
     }
@@ -532,33 +619,38 @@ struct PrompterView: View {
     }
 
     private var speedControls: some View {
-        HStack(spacing: 10) {
+        let stepSize: CGFloat = isCompactWidth ? 44 : 48
+        return HStack(spacing: isCompactWidth ? 8 : 10) {
             Button { changeSpeed(by: -10) } label: {
                 Image(systemName: "minus")
             }
             .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 18, horizontalPadding: 0))
-            .frame(width: 48, height: 48)
+            .frame(width: stepSize, height: stepSize)
             .accessibilityLabel("Slower")
 
-            Image(systemName: "gauge.with.needle")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(LensGlassColor.secondaryLabel)
-                .accessibilityHidden(true)
+            if !isCompactWidth {
+                Image(systemName: "gauge.with.needle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(LensGlassColor.secondaryLabel)
+                    .accessibilityHidden(true)
+            }
             Slider(value: $speed, in: 10...300)
                 .frame(minWidth: 60, maxWidth: 300)
                 .accessibilityLabel("Speed")
                 .accessibilityValue(String(format: "%.1f", speed / 20))
             Text(String(format: "%.1f", speed / 20))
-                .font(.system(size: 22, weight: .bold).monospacedDigit())
+                .font(.system(size: isCompactWidth ? 20 : 22, weight: .bold).monospacedDigit())
                 .foregroundStyle(LensGlassColor.label)
-                .frame(minWidth: 52, alignment: .trailing)
+                .lineLimit(1)
+                .fixedSize()
+                .frame(minWidth: isCompactWidth ? 40 : 52, alignment: .trailing)
                 .accessibilityHidden(true)
 
             Button { changeSpeed(by: 10) } label: {
                 Image(systemName: "plus")
             }
             .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 18, horizontalPadding: 0))
-            .frame(width: 48, height: 48)
+            .frame(width: stepSize, height: stepSize)
             .accessibilityLabel("Faster")
         }
     }
@@ -607,7 +699,7 @@ struct PrompterView: View {
             .frame(minWidth: 44, minHeight: 44)
             .accessibilityLabel("Add marker")
 
-            Spacer()
+            Spacer(minLength: 0)
 
             remoteButton
         }
@@ -620,7 +712,9 @@ struct PrompterView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "iphone.radiowaves.left.and.right")
-                Text("Remote")
+                if !isCompactWidth {
+                    Text("Remote").lineLimit(1)
+                }
                 if !store.isPro {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 12, weight: .bold))
@@ -628,8 +722,9 @@ struct PrompterView: View {
             }
         }
         .buttonStyle(LensGlassButtonStyle(role: .secondary, isActive: remote.status == .connected,
-                                          fontSize: 18, horizontalPadding: 16))
-        .frame(width: 180, height: 52)
+                                          fontSize: 18, horizontalPadding: isCompactWidth ? 10 : 16))
+        // iPhone portrait: icon-only so the tool row fits; iPad/Mac keep the labeled button.
+        .frame(width: isCompactWidth ? (store.isPro ? 56 : 72) : 180, height: isCompactWidth ? 48 : 52)
         .accessibilityLabel(remote.isRunning ? "Remote, Allow Remote: on" : "Remote, Allow Remote: off")
         .popover(isPresented: $showRemotePanel, arrowEdge: .bottom) {
             remotePanel
