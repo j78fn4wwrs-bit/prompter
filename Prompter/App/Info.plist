@@ -22,6 +22,8 @@
 	<key>NSCameraUsageDescription</key><string>Steady Prompter uses the front camera to record you while you read your script.</string>
 	<key>NSMicrophoneUsageDescription</key><string>Steady Prompter records your voice along with the video while you read your script.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key><string>Steady Prompter saves your finished recordings to your Photos library.</string>
+	<key>NSLocalNetworkUsageDescription</key><string>Steady Prompter uses your local network to connect a remote control device nearby.</string>
+	<key>NSBonjourServices</key><array><string>_steadyprompt._tcp</string><string>_steadyprompt._udp</string></array>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>

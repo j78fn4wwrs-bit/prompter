@@ -8,10 +8,13 @@ struct PrompterView: View {
     @EnvironmentObject private var store: ProStore
     @StateObject private var engine = ScrollEngine()
     @StateObject private var camera = CameraRecorder()
+    @StateObject private var remote = RemoteHost()
+    @AppStorage(RemotePrefKey.allowRemote) private var allowRemote: Bool = false
 
     @AppStorage(PrefKey.speed) private var speed: Double = 60
     @AppStorage(PrefKey.fontSize) private var fontSize: Double = 44
     @AppStorage(PrefKey.mirror) private var mirror: Bool = false
+    @AppStorage(PrefKey.prompterMarkerRail) private var showMarkerRail: Bool = true
     @AppStorage(PrefKey.textHex) private var textHex: String = "#FFFFFF"
     @AppStorage(PrefKey.backgroundHex) private var backgroundHex: String = "#000000"
 
@@ -25,6 +28,14 @@ struct PrompterView: View {
     @State private var showColors = false
     @State private var showChapters = false
     @State private var showHelp = false
+    @State private var showRemotePanel = false
+    /// Marker being named right after it was added (main view alert).
+    @State private var renameOffset: Int?
+    /// Marker being renamed from the Chapters & Markers list (alert inside the sheet).
+    @State private var listRenameOffset: Int?
+    @State private var renameText = ""
+    /// Bumped on every text change, so a remote edit based on old text is refused.
+    @State private var scriptRevision = 0
     @State private var cameraMode = false
     @State private var hud: String?
     @State private var hudTask: Task<Void, Never>?
@@ -48,6 +59,8 @@ struct PrompterView: View {
     /// iPhone-style layout: compact width (portrait) or compact height (landscape).
     /// iPad and Mac are regular/regular, so they keep the original layout.
     private var isCompactLayout: Bool { horizontalSizeClass == .compact || verticalSizeClass == .compact }
+    private var isCompactWidth: Bool { horizontalSizeClass == .compact }
+    private var isCompactHeight: Bool { verticalSizeClass == .compact }
     private var showsControls: Bool { showControls && !engine.isPlaying && countdown == nil }
     private var fontRange: ClosedRange<Double> {
         let base: ClosedRange<Double> = isPad ? 24...120 : 20...80
@@ -83,7 +96,25 @@ struct PrompterView: View {
         let ls = lines
         return Set(markers.map { ScriptOutline.lineIndex(for: $0, in: ls) })
     }
-    private var jumpPoints: [JumpPoint] { ScriptOutline.jumpPoints(lines: lines, markers: markers) }
+    private var jumpPoints: [JumpPoint] {
+        ScriptOutline.jumpPoints(lines: lines, markers: markers, names: script.markerNames ?? [:])
+    }
+
+    /// True when the prompter background is light (e.g. Black on White), so overlay icons go dark.
+    private var isLightBackground: Bool {
+        if cameraMode { return false }
+        let hex = (store.isPro || usingFreePreset) ? backgroundHex : "#000000"
+        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("#") { s.removeFirst() }
+        var value: UInt64 = 0
+        Scanner(string: s).scanHexInt64(&value)
+        let r = Double((value >> 16) & 0xFF) / 255.0
+        let g = Double((value >> 8) & 0xFF) / 255.0
+        let b = Double(value & 0xFF) / 255.0
+        return (0.299 * r + 0.587 * g + 0.114 * b) > 0.6
+    }
+    private var overlayIconColor: Color { isLightBackground ? Color.black.opacity(0.85) : Color.white }
+    private var overlayCircleColor: Color { isLightBackground ? Color.black.opacity(0.10) : Color.white.opacity(0.16) }
 
     var body: some View {
         GeometryReader { geo in
@@ -110,9 +141,15 @@ struct PrompterView: View {
                 }
                 if showsControls && !isCompactLayout {
                     controls
+                    if showMarkerRail && !markerPoints.isEmpty {
+                        markerRail(height: geo.size.height)
+                    }
                 }
                 if let hud {
                     hudView(hud)
+                }
+                if remote.isRunning {
+                    remoteBadge
                 }
             }
             .onAppear {
@@ -149,6 +186,33 @@ struct PrompterView: View {
                 fontSize = min(max(fontSize, fontRange.lowerBound), fontRange.upperBound)
             }
             keyboardFocused = true
+            if allowRemote && store.isPro { remote.start() }
+        }
+        .onReceive(remote.commands) { command in handleRemote(command) }
+        .onReceive(remote.markerCommands) { command in handleRemoteMarker(command) }
+        .onReceive(remote.scriptMessages) { message in handleRemoteScript(message) }
+        .onChange(of: script.text) { _, _ in
+            scriptRevision += 1
+            sendRemoteState(force: true)
+        }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            if remote.status == .connected { sendRemoteState() }
+        }
+        .onChange(of: remote.status) { _, newStatus in
+            if newStatus == .connected {
+                sendRemoteState(force: true)
+                // Line positions may not be measured yet right after connecting; send again shortly.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(600))
+                    sendRemoteState(force: true)
+                }
+            }
+        }
+        .onChange(of: script.markerOffsets) { _, _ in sendRemoteState(force: true) }
+        .onChange(of: script.markerNames) { _, _ in sendRemoteState(force: true) }
+        .onChange(of: script.markerTimecodes) { _, _ in sendRemoteState(force: true) }
+        .onChange(of: store.isPro) { _, nowPro in
+            if !nowPro { remote.stop() }
         }
         .onChange(of: speed) { _, newValue in engine.speed = newValue }
         .onChange(of: fontSize) { oldValue, newValue in
@@ -157,12 +221,14 @@ struct PrompterView: View {
         }
         .onChange(of: engine.isPlaying) { _, playing in
             if !playing && camera.isRecording { camera.stopRecording() }
+            sendRemoteState()
         }
         .onDisappear {
             countdownTask?.cancel()
             hudTask?.cancel()
             engine.reset()
             camera.stopSession()
+            remote.stop()
         }
         .sheet(item: $paywallFeature, onDismiss: { keyboardFocused = true }) { feature in
             PaywallView(feature: feature).environmentObject(store)
@@ -177,6 +243,11 @@ struct PrompterView: View {
         }
         .sheet(isPresented: $showHelp, onDismiss: { keyboardFocused = true }) {
             helpSheet
+        }
+        .sheet(isPresented: showRenameAlert, onDismiss: { keyboardFocused = true }) {
+            if let offset = renameOffset {
+                MarkerEditSheet(script: script, offset: offset) { renameOffset = nil }
+            }
         }
         .animation(.easeInOut(duration: 0.2), value: countdown)
         .animation(.easeInOut(duration: 0.2), value: engine.isPlaying)
@@ -276,33 +347,184 @@ struct PrompterView: View {
         .allowsHitTesting(false)
     }
 
+    private var markerPoints: [JumpPoint] { jumpPoints.filter { $0.kind == .marker } }
+
+    /// The last marker at or above the reading line.
+    private var currentMarkerID: String? {
+        var found: String?
+        for point in markerPoints {
+            let top = lineTops[point.lineIndex] ?? 0
+            if top <= engine.offset + 1 { found = point.id }
+        }
+        return found
+    }
+
+    /// Slim markers list on the right edge. Only shown while paused (with the other controls),
+    /// so it never covers the text during a read. It is not mirrored, like the other controls.
+    private func markerRail(height: CGFloat) -> some View {
+        HStack {
+            Spacer()
+            markerPanel(maxHeight: height * 0.4, width: min(220, viewWidth * 0.32))
+                .padding(.trailing, 12)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.top, 110)
+        .transition(.opacity)
+    }
+
+    /// The boxed markers list used by the rail (iPad/Mac) and beside the control panel (iPhone landscape).
+    private func markerPanel(maxHeight: CGFloat, width: CGFloat) -> some View {
+        let current = currentMarkerID
+        return VStack(alignment: .leading, spacing: 6) {
+                Text("Markers")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(overlayIconColor.opacity(0.7))
+                    .padding(.horizontal, 6)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(markerPoints) { point in
+                            let isCurrent = point.id == current
+                            Button {
+                                jump(toLine: point.lineIndex, label: point.title)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: isCurrent ? "bookmark.fill" : "bookmark")
+                                        .foregroundStyle(isCurrent ? LensGlassColor.yellow : overlayIconColor)
+                                    Text(point.title)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+                                        .foregroundStyle(overlayIconColor)
+                                    Spacer(minLength: 0)
+                                    if let offset = Int(point.id.dropFirst()) {
+                                        MarkerTimeText(script: script, offset: offset, color: overlayIconColor)
+                                    }
+                                }
+                                .font(.footnote.weight(isCurrent ? .bold : .regular))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(isCurrent ? LensGlassColor.yellow.opacity(0.25) : Color.clear)
+                                )
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button { beginRailRename(point) } label: {
+                                    Label("Edit Marker", systemImage: "pencil")
+                                }
+                                Button(role: .destructive) { removeMarker(point) } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            .accessibilityLabel(isCurrent ? "\(point.title), current" : point.title)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .frame(width: width)
+            .frame(maxHeight: maxHeight)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(isLightBackground ? Color.white.opacity(0.85) : Color.black.opacity(0.55))
+            )
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(overlayIconColor.opacity(0.2), lineWidth: 1))
+    }
+
+    /// Round overlay button whose icon and fill contrast with the prompter background.
+    private func topButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            topButtonFace(icon)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func topButtonFace(_ icon: String) -> some View {
+        Image(systemName: icon)
+            .font(.title3.bold())
+            .foregroundStyle(overlayIconColor)
+            .frame(width: 44, height: 44)
+            .background(Circle().fill(overlayCircleColor))
+            .overlay(Circle().strokeBorder(overlayIconColor.opacity(0.25), lineWidth: 1))
+            .contentShape(Circle())
+    }
+
+    // MARK: iPhone (compact) layout
+
+    /// iPhone controls. Laid out inside the safe area. Top row keeps Close, Markers list and
+    /// Add Marker visible; the less-used buttons live in a "…" menu. In portrait the marker rail
+    /// is hidden (the list button opens Chapters & Markers); in landscape the markers panel sits
+    /// beside the control panel so it never covers the speed controls.
+    private var compactControls: some View {
+        GeometryReader { geo in
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    topButton("xmark", label: "Close") { dismiss() }
+                    Spacer(minLength: 0)
+                    topButton("list.bullet", label: "Chapters and markers") { showChapters = true }
+                    topButton("bookmark", label: "Add marker here") { addMarker() }
+                    Menu {
+                        Button { engine.reset(); flash("Top") } label: {
+                            Label("Back to Top", systemImage: "backward.end.fill")
+                        }
+                        if isCompactHeight && !markerPoints.isEmpty {
+                            Button { showMarkerRail.toggle() } label: {
+                                Label(showMarkerRail ? "Hide Markers Panel" : "Show Markers Panel",
+                                      systemImage: "sidebar.right")
+                            }
+                        }
+                        Button { showHelp = true } label: {
+                            Label("Keyboard Shortcuts", systemImage: "keyboard")
+                        }
+                    } label: {
+                        topButtonFace("ellipsis")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More")
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+
+                Spacer(minLength: 0)
+                    .allowsHitTesting(false)
+
+                if let message = camera.statusMessage {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.black.opacity(0.6), in: Capsule())
+                }
+
+                HStack(alignment: .bottom, spacing: 10) {
+                    controlBar
+                    if isCompactHeight && showMarkerRail && !markerPoints.isEmpty {
+                        markerPanel(maxHeight: max(120, geo.size.height - 70), width: 200)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+    }
+
     private var controls: some View {
         VStack {
-            HStack(spacing: 4) {
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark").padding(10)
-                }
-                .accessibilityLabel("Close")
+            HStack(spacing: 8) {
+                topButton("xmark", label: "Close") { dismiss() }
                 Spacer()
-                Button { showHelp = true } label: {
-                    Image(systemName: "keyboard").padding(10)
+                topButton("keyboard", label: "Keyboard shortcuts") { showHelp = true }
+                topButton("list.bullet", label: "Chapters and markers") { showChapters = true }
+                topButton(showMarkerRail ? "sidebar.right" : "sidebar.squares.right",
+                          label: showMarkerRail ? "Hide markers list" : "Show markers list") {
+                    showMarkerRail.toggle()
                 }
-                .accessibilityLabel("Keyboard shortcuts")
-                Button { showChapters = true } label: {
-                    Image(systemName: "list.bullet").padding(10)
-                }
-                .accessibilityLabel("Chapters and markers")
-                Button { addMarker() } label: {
-                    Image(systemName: "bookmark").padding(10)
-                }
-                .accessibilityLabel("Add marker here")
-                Button { engine.reset(); flash("Top") } label: {
-                    Image(systemName: "backward.end.fill").padding(10)
-                }
-                .accessibilityLabel("Back to top")
+                topButton("bookmark", label: "Add marker here") { addMarker() }
+                topButton("backward.end.fill", label: "Back to top") { engine.reset(); flash("Top") }
             }
-            .font(.title3.bold())
-            .foregroundStyle(.white)
             .padding(.horizontal, 16)
             .padding(.top, 50)
 
@@ -317,119 +539,277 @@ struct PrompterView: View {
                     .background(.black.opacity(0.6), in: Capsule())
             }
 
-            controlPanel
+            controlBar
                 .padding(.horizontal, 12)
                 .padding(.bottom, 30)
         }
     }
 
-    /// Speed, size, tools and play. Shared by the iPad/Mac layout and the iPhone layout.
-    private var controlPanel: some View {
+    // MARK: Lens Glass control bar (D1)
+
+    private var controlBar: some View {
         VStack(spacing: isCompactLayout ? 10 : 14) {
-            HStack {
-                Image(systemName: "tortoise.fill")
-                Slider(value: $speed, in: 10...300)
-                Image(systemName: "hare.fill")
-            }
-            HStack {
-                Image(systemName: "textformat.size.smaller")
-                // Left = smaller, right = bigger. The value is the point size.
-                Slider(value: fontBinding, in: fontRange)
-                Image(systemName: "textformat.size.larger")
-            }
-            HStack(spacing: 22) {
-                Toggle(isOn: $mirror) {
-                    Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 20) {
+                    transportControls
+                    speedControls
                 }
-                .toggleStyle(.button)
-                .accessibilityLabel("Mirror")
-
-                proButton(icon: cameraMode ? "video.fill" : "video", active: cameraMode, feature: .camera) {
-                    cameraMode.toggle()
-                    if cameraMode { camera.prepare() } else { camera.stopSession() }
-                }
-                .accessibilityLabel("Camera")
-                // Colors: basic presets are free, custom colors are Pro (inside the sheet).
-                Button { showColors = true } label: {
-                    Image(systemName: "paintpalette")
-                }
-                .accessibilityLabel("Colors")
-
-                Spacer()
-
-                Button { togglePlay() } label: {
-                    Image(systemName: cameraMode ? "record.circle" : "play.circle.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(cameraMode ? Color.red : Color.white)
+                VStack(spacing: 14) {
+                    transportControls
+                    speedControls
                 }
             }
-            .font(.title2)
+            fontSizeRow
+            toolRow
+            if remote.hasPairedRemote {
+                Button(role: .destructive) {
+                    remote.forgetPairedRemote()
+                } label: {
+                    Label("Forget paired remote", systemImage: "xmark.circle")
+                        .font(.subheadline)
+                }
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             if !isCompactLayout {
                 Text("Tap anywhere to start or pause. Drag to move. ⌘/ for keyboard shortcuts.")
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(LensGlassColor.secondaryLabel)
             }
         }
-        .tint(.white)
-        .foregroundStyle(.white)
-        .padding(isCompactLayout ? 12 : 16)
-        .frame(maxWidth: 640)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .environment(\.colorScheme, .dark)
+        .tint(LensGlassColor.yellow)
+        .foregroundStyle(LensGlassColor.label)
+        .padding(isCompactLayout ? 14 : 18)
+        .frame(maxWidth: 760)
+        .background(controlBarBackground)
     }
 
-    // MARK: iPhone (compact) layout
-
-    /// iPhone controls, laid out inside the safe area. The top row keeps Close, Chapters & Markers
-    /// and Add Marker visible; Back to Top and Keyboard Shortcuts live in a "…" menu.
-    private var compactControls: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 4) {
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark").padding(10)
-                }
-                .accessibilityLabel("Close")
-                Spacer(minLength: 0)
-                Button { showChapters = true } label: {
-                    Image(systemName: "list.bullet").padding(10)
-                }
-                .accessibilityLabel("Chapters and markers")
-                Button { addMarker() } label: {
-                    Image(systemName: "bookmark").padding(10)
-                }
-                .accessibilityLabel("Add marker here")
-                Menu {
-                    Button { engine.reset(); flash("Top") } label: {
-                        Label("Back to Top", systemImage: "backward.end.fill")
-                    }
-                    Button { showHelp = true } label: {
-                        Label("Keyboard Shortcuts", systemImage: "keyboard")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle").padding(10)
-                }
-                .accessibilityLabel("More")
+    private var controlBarBackground: some View {
+        RoundedRectangle(cornerRadius: 30, style: .continuous)
+            .fill(LensGlassColor.card.opacity(0.94))
+            .overlay {
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .strokeBorder(LensGlassColor.separator, lineWidth: 1.5)
             }
-            .font(.title3.bold())
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
+    }
+
+    private var transportControls: some View {
+        HStack(spacing: 12) {
+            Button { jumpRelative(-1) } label: {
+                Image(systemName: "backward.fill")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .secondary, fontSize: 20, horizontalPadding: 0))
+            .frame(width: 60, height: 60)
+            .accessibilityLabel("Back")
+
+            Button { togglePlay() } label: {
+                Image(systemName: cameraMode ? "record.circle" : (engine.isPlaying ? "pause.fill" : "play.fill"))
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .primary, fontSize: 28, horizontalPadding: 0))
+            .frame(width: 72, height: 72)
+            .accessibilityLabel(cameraMode ? "Record" : (engine.isPlaying ? "Pause" : "Play"))
+
+            Button { jumpRelative(1) } label: {
+                Image(systemName: "forward.fill")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .secondary, fontSize: 20, horizontalPadding: 0))
+            .frame(width: 60, height: 60)
+            .accessibilityLabel("Forward")
+        }
+    }
+
+    private var speedControls: some View {
+        let stepSize: CGFloat = isCompactWidth ? 44 : 48
+        return HStack(spacing: isCompactWidth ? 8 : 10) {
+            Button { changeSpeed(by: -10) } label: {
+                Image(systemName: "minus")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 18, horizontalPadding: 0))
+            .frame(width: stepSize, height: stepSize)
+            .accessibilityLabel("Slower")
+
+            if !isCompactWidth {
+                Image(systemName: "gauge.with.needle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(LensGlassColor.secondaryLabel)
+                    .accessibilityHidden(true)
+            }
+            Slider(value: $speed, in: 10...300)
+                .frame(minWidth: 60, maxWidth: 300)
+                .accessibilityLabel("Speed")
+                .accessibilityValue(String(format: "%.1f", speed / 20))
+            Text(String(format: "%.1f", speed / 20))
+                .font(.system(size: isCompactWidth ? 20 : 22, weight: .bold).monospacedDigit())
+                .foregroundStyle(LensGlassColor.label)
+                .lineLimit(1)
+                .fixedSize()
+                .frame(minWidth: isCompactWidth ? 40 : 52, alignment: .trailing)
+                .accessibilityHidden(true)
+
+            Button { changeSpeed(by: 10) } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 18, horizontalPadding: 0))
+            .frame(width: stepSize, height: stepSize)
+            .accessibilityLabel("Faster")
+        }
+    }
+
+    private var fontSizeRow: some View {
+        HStack {
+            Image(systemName: "textformat.size.smaller")
+                .accessibilityHidden(true)
+            // Left = smaller, right = bigger. The value is the point size.
+            Slider(value: fontBinding, in: fontRange)
+                .accessibilityLabel("Text size")
+            Image(systemName: "textformat.size.larger")
+                .accessibilityHidden(true)
+        }
+        .font(.title3)
+        .foregroundStyle(LensGlassColor.secondaryLabel)
+    }
+
+    private var toolRow: some View {
+        HStack(spacing: 12) {
+            Toggle(isOn: $mirror) {
+                Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+            }
+            .toggleStyle(.button)
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Mirror")
+
+            proButton(icon: cameraMode ? "video.fill" : "video", active: cameraMode, feature: .camera) {
+                cameraMode.toggle()
+                if cameraMode { camera.prepare() } else { camera.stopSession() }
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Camera")
+
+            // Colors: basic presets are free, custom colors are Pro (inside the sheet).
+            Button { showColors = true } label: {
+                Image(systemName: "paintpalette")
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Colors")
+
+            // Same action as the top bookmark button and the M key.
+            Button { addMarker() } label: {
+                Image(systemName: "bookmark")
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Add marker")
 
             Spacer(minLength: 0)
-                .allowsHitTesting(false)
 
-            if let message = camera.statusMessage {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.white)
-                    .padding(8)
-                    .background(.black.opacity(0.6), in: Capsule())
-            }
-
-            controlPanel
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+            remoteButton
         }
+        .font(.title2)
+    }
+
+    private var remoteButton: some View {
+        Button {
+            if store.isPro { showRemotePanel = true } else { paywallFeature = .remote }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "iphone.radiowaves.left.and.right")
+                if !isCompactWidth {
+                    Text("Remote").lineLimit(1)
+                }
+                if !store.isPro {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 12, weight: .bold))
+                }
+            }
+        }
+        .buttonStyle(LensGlassButtonStyle(role: .secondary, isActive: remote.status == .connected,
+                                          fontSize: 18, horizontalPadding: isCompactWidth ? 10 : 16))
+        // iPhone portrait: icon-only so the tool row fits; iPad/Mac keep the labeled button.
+        .frame(width: isCompactWidth ? (store.isPro ? 56 : 72) : 180, height: isCompactWidth ? 48 : 52)
+        .accessibilityLabel(remote.isRunning ? "Remote, Allow Remote: on" : "Remote, Allow Remote: off")
+        .popover(isPresented: $showRemotePanel, arrowEdge: .bottom) {
+            remotePanel
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private var allowRemoteBinding: Binding<Bool> {
+        Binding(
+            get: { allowRemote },
+            set: { on in
+                allowRemote = on
+                if on {
+                    remote.start()
+                } else {
+                    remote.stop()
+                    remote.forgetPairedRemote()
+                }
+            }
+        )
+    }
+
+    private var remoteSubtitle: String {
+        if !remote.isRunning { return "\(UIDevice.current.name) · off" }
+        if remote.status == .connected { return "Connected to your remote" }
+        return "\(UIDevice.current.name) · ready to pair · code \(remote.code)"
+    }
+
+    private var remotePanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Toggle(isOn: allowRemoteBinding) {
+                HStack(spacing: 10) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .foregroundStyle(LensGlassColor.accent)
+                        .accessibilityHidden(true)
+                    Text("Allow Remote")
+                        .font(.system(size: 22, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+            .toggleStyle(LensGlassToggleStyle())
+
+            Text(remoteSubtitle)
+                .font(.system(size: 15))
+                .foregroundStyle(LensGlassColor.secondaryLabel)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().overlay(LensGlassColor.separator)
+
+            Button { showRemotePanel = false } label: {
+                Label("Done", systemImage: "checkmark")
+            }
+            .buttonStyle(LensGlassButtonStyle(role: .utility, fontSize: 17))
+            .frame(height: 44)
+        }
+        .foregroundStyle(LensGlassColor.label)
+        .padding(24)
+        .frame(width: min(400, max(280, viewWidth - 32)))
+        .background(LensGlassColor.card)
+    }
+
+    /// Top-left pill: pairing code while waiting, connected/disconnected otherwise.
+    /// Never blocks touches, and the prompter keeps running if the link drops.
+    private var remoteBadge: some View {
+        VStack {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    RemoteStatusBadge(status: remote.status)
+                    if remote.status != .connected && !engine.isPlaying {
+                        Text("Remote code \(remote.code)")
+                            .font(.headline.monospacedDigit())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(.black.opacity(0.55), in: Capsule())
+                    }
+                }
+                Spacer()
+            }
+            .padding(.leading, 16)
+            .padding(.top, showControls && !engine.isPlaying ? 100 : 16)
+            Spacer()
+        }
+        .allowsHitTesting(false)
     }
 
     private var fontBinding: Binding<Double> {
@@ -442,7 +822,7 @@ struct PrompterView: View {
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: icon)
-                    .foregroundStyle(active ? Color.red : Color.white)
+                    .foregroundStyle(active ? Color.red : LensGlassColor.label)
                 if !store.isPro {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 10))
@@ -497,6 +877,9 @@ struct PrompterView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(LensGlassBackground())
+            .tint(LensGlassColor.accent)
             .navigationTitle("Colors")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -525,6 +908,9 @@ struct PrompterView: View {
                                 .foregroundStyle(.orange)
                             Text(point.title).foregroundStyle(.primary).lineLimit(2)
                             Spacer()
+                            if point.kind == .marker, let offset = Int(point.id.dropFirst()) {
+                                MarkerTimeText(script: script, offset: offset)
+                            }
                             if index < 9 {
                                 Text("\(index + 1)").font(.caption.monospaced()).foregroundStyle(.secondary)
                             }
@@ -535,8 +921,30 @@ struct PrompterView: View {
                             Button(role: .destructive) { removeMarker(point) } label: {
                                 Label("Delete", systemImage: "trash")
                             }
+                            Button { beginListRename(point) } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            .tint(LensGlassColor.accent)
                         }
                     }
+                    .contextMenu {
+                        if point.kind == .marker {
+                            Button { beginListRename(point) } label: {
+                                Label("Edit Marker", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) { removeMarker(point) } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(LensGlassBackground())
+            .tint(LensGlassColor.accent)
+            .sheet(isPresented: showListRenameAlert) {
+                if let offset = listRenameOffset {
+                    MarkerEditSheet(script: script, offset: offset) { listRenameOffset = nil }
                 }
             }
             .navigationTitle("Chapters & Markers")
@@ -555,6 +963,7 @@ struct PrompterView: View {
                     shortcutRow("↑ / ↓", "Speed up / slow down")
                     shortcutRow("⌘+ (or ⌘=) / ⌘−", "Bigger / smaller text")
                     shortcutRow("M", "Add a marker at the reading line")
+                    shortcutRow("Tab / Shift-Tab", "Next / previous marker")
                     shortcutRow("← / → or [ / ]", "Previous / next chapter or marker")
                     shortcutRow("1 – 9", "Jump to chapter or marker N")
                     shortcutRow("Home or ⌘↑", "Back to top")
@@ -568,6 +977,9 @@ struct PrompterView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(LensGlassBackground())
+            .tint(LensGlassColor.accent)
             .navigationTitle("Keyboard Shortcuts")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -674,26 +1086,47 @@ struct PrompterView: View {
         return best
     }
 
-    private func addMarker() {
+    /// `offerEdit: false` for the remote, so the host never pops a sheet the operator didn't ask for.
+    private func addMarker(offerEdit: Bool = true) {
         let ls = lines
         let idx = currentLineIndex
         guard ls.indices.contains(idx) else { return }
-        let offset = ls[idx].startOffset
-        var current = script.markerOffsets ?? []
-        if current.contains(offset) {
+        guard let offset = script.addMarker(atLineContaining: ls[idx].startOffset) else {
             flash("Marker already here")
             return
         }
-        current.append(offset)
-        current.sort()
-        script.markerOffsets = current
-        let number = (current.firstIndex(of: offset) ?? 0) + 1
-        flash("Marker \(number) added")
+        flash("\(script.defaultMarkerName(for: offset)) added")
+        // Offer a name only while paused, so a live read (M key, remote) is never interrupted.
+        if offerEdit && !engine.isPlaying && countdown == nil {
+            renameText = script.defaultMarkerName(for: offset)
+            renameOffset = offset
+        }
     }
 
     private func removeMarker(_ point: JumpPoint) {
         guard point.kind == .marker, let offset = Int(point.id.dropFirst()) else { return }
-        script.markerOffsets = (script.markerOffsets ?? []).filter { $0 != offset }
+        script.removeMarker(at: offset)
+    }
+
+    private func beginListRename(_ point: JumpPoint) {
+        guard point.kind == .marker, let offset = Int(point.id.dropFirst()) else { return }
+        renameText = script.markerName(for: offset)
+        listRenameOffset = offset
+    }
+
+    /// Rename from the on-screen rail uses the main-view alert (the sheet is not open).
+    private func beginRailRename(_ point: JumpPoint) {
+        guard point.kind == .marker, let offset = Int(point.id.dropFirst()) else { return }
+        renameText = script.markerName(for: offset)
+        renameOffset = offset
+    }
+
+    private var showRenameAlert: Binding<Bool> {
+        Binding(get: { renameOffset != nil }, set: { if !$0 { renameOffset = nil } })
+    }
+
+    private var showListRenameAlert: Binding<Bool> {
+        Binding(get: { listRenameOffset != nil }, set: { if !$0 { listRenameOffset = nil } })
     }
 
     private func jump(toLine index: Int, label: String) {
@@ -707,15 +1140,15 @@ struct PrompterView: View {
         flash("Top")
     }
 
-    private func jumpRelative(_ direction: Int) {
-        let points = jumpPoints
-        guard !points.isEmpty else { flash("No chapters or markers"); return }
+    private func jumpRelative(_ direction: Int, markersOnly: Bool = false) {
+        let points = markersOnly ? jumpPoints.filter { $0.kind == .marker } : jumpPoints
+        guard !points.isEmpty else { flash(markersOnly ? "No markers yet. Press M to add one" : "No chapters or markers"); return }
         let here = engine.offset
         let tops = points.map { lineTops[$0.lineIndex] ?? 0 }
         if direction > 0 {
             if let i = tops.firstIndex(where: { $0 > here + 2 }) {
                 jump(toLine: points[i].lineIndex, label: points[i].title)
-            } else { flash("Last chapter") }
+            } else { flash(markersOnly ? "Last marker" : "Last chapter") }
         } else {
             if let i = tops.lastIndex(where: { $0 < here - 2 }) {
                 jump(toLine: points[i].lineIndex, label: points[i].title)
@@ -741,6 +1174,131 @@ struct PrompterView: View {
             .onEnded { _ in
                 dragStartOffset = nil
             }
+    }
+
+    // MARK: Remote control (v1.1)
+
+    /// Remote commands reuse the same actions as the keyboard shortcuts.
+    /// Allow Remote is already Pro-gated, so no extra check here.
+    private func handleRemote(_ command: RemoteCommand) {
+        switch command {
+        case .playPause: togglePlay()
+        case .speedUp: changeSpeed(by: 10)
+        case .speedDown: changeSpeed(by: -10)
+        case .jumpBack: remoteJump(-1)
+        case .jumpForward: remoteJump(1)
+        case .resetToTop: jumpToTop()
+        }
+        sendRemoteState()
+    }
+
+    private func handleRemoteMarker(_ command: RemoteMarkerCommand) {
+        switch command {
+        case .add: addMarker(offerEdit: false)
+        case .next: jumpRelative(1, markersOnly: true)
+        case .previous: jumpRelative(-1, markersOnly: true)
+        case .jump(let key):
+            if let point = markerPoints.first(where: { $0.id == "m\(key)" }) {
+                jump(toLine: point.lineIndex, label: point.title)
+            } else {
+                flash("Marker not found")
+            }
+        }
+        sendRemoteState(force: true)
+    }
+
+    private var isPausedForRemote: Bool { !engine.isPlaying && countdown == nil }
+
+    private func handleRemoteScript(_ message: RemoteMessage) {
+        switch message {
+        case .nav(let command):
+            guard isPausedForRemote else { flash("Pause to move through the script"); return }
+            let line = scaledFont * 1.3
+            let page = max(line * 3, UIScreen.main.bounds.height * 0.6)
+            switch command {
+            // Same rule as the drag gesture: offset clamped to 0...maxOffset.
+            case .scrub(let points): engine.nudge(by: CGFloat(points) * 2)
+            case .lineDown: engine.nudge(by: line)
+            case .lineUp: engine.nudge(by: -line)
+            case .pageDown: engine.nudge(by: page)
+            case .pageUp: engine.nudge(by: -page)
+            }
+            sendRemoteState()
+        case .scriptRequest:
+            let payload = RemoteScript(title: script.title, text: script.text, revision: scriptRevision)
+            if script.text.utf8.count > RemoteLimits.maxScriptBytes {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .tooLarge, revision: scriptRevision)))
+            } else {
+                remote.send(message: .script(payload))
+            }
+        case .scriptUpdate(let update):
+            guard isPausedForRemote else {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .playing, revision: scriptRevision)))
+                return
+            }
+            guard update.baseRevision == scriptRevision else {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .conflict, revision: scriptRevision)))
+                return
+            }
+            guard update.text.utf8.count <= RemoteLimits.maxScriptBytes else {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .tooLarge, revision: scriptRevision)))
+                return
+            }
+            if update.text == script.text {
+                remote.send(message: .scriptResult(RemoteScriptResult(kind: .saved, revision: scriptRevision)))
+                return
+            }
+            // Keep roughly the same place: same fraction of the script.
+            let fraction = engine.maxOffset > 0 ? engine.offset / engine.maxOffset : 0
+            script.replaceText(with: update.text)
+            // onChange(of: script.text) bumps the revision on the next update; report the new one.
+            let newRevision = scriptRevision + 1
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                engine.offset = min(max(0, fraction * engine.maxOffset), engine.maxOffset)
+                sendRemoteState(force: true)
+            }
+            remote.send(message: .scriptResult(RemoteScriptResult(kind: .saved, revision: newRevision)))
+            flash("Script updated from remote")
+        default:
+            break
+        }
+    }
+
+    private var remoteMarkers: [RemoteMarker] {
+        markerPoints.compactMap { point in
+            guard let key = Int(point.id.dropFirst()) else { return nil }
+            if let set = script.markerTimecode(for: key) {
+                return RemoteMarker(key: key, name: point.title, seconds: set, isEstimate: false)
+            }
+            return RemoteMarker(key: key, name: point.title,
+                                seconds: script.estimatedSeconds(for: key), isEstimate: true)
+        }
+    }
+
+    /// Markers/chapters if the script has any, otherwise about a screenful.
+    private func remoteJump(_ direction: Int) {
+        if jumpPoints.isEmpty {
+            let screen = max(scaledFont * 3, UIScreen.main.bounds.height * 0.6)
+            engine.jump(to: engine.offset + CGFloat(direction) * screen)
+        } else {
+            jumpRelative(direction)
+        }
+    }
+
+    private var currentPointTitle: String? {
+        let points = jumpPoints
+        let here = engine.offset + 2
+        return points.last(where: { (lineTops[$0.lineIndex] ?? .greatestFiniteMagnitude) <= here })?.title
+    }
+
+    private func sendRemoteState(force: Bool = false) {
+        guard remote.status == .connected else { return }
+        let currentKey = currentMarkerID.flatMap { Int($0.dropFirst()) }
+        remote.send(RemoteState(isPlaying: engine.isPlaying || countdown != nil, speed: speed,
+                                markerTitle: currentPointTitle,
+                                markers: remoteMarkers, currentMarkerKey: currentKey,
+                                scriptRevision: scriptRevision), force: force)
     }
 
     /// Runs a keyboard action if Pro (keyboard control is a Pro feature), otherwise explains.
@@ -774,6 +1332,9 @@ struct PrompterView: View {
         case .downArrow: action = { changeSpeed(by: -10) }
         case .leftArrow: action = { jumpRelative(-1) }
         case .rightArrow: action = { jumpRelative(1) }
+        case .tab:
+            let back = press.modifiers.contains(.shift)
+            action = { jumpRelative(back ? -1 : 1, markersOnly: true) }
         case .pageDown: action = { engine.nudge(by: step) }
         case .pageUp: action = { engine.nudge(by: -step) }
         case .home: action = { jumpToTop() }

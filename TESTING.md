@@ -80,11 +80,102 @@ Tap + > **Import File**. The title should be the file name; errors show in an al
 47. [ ] **Markers persist:** add markers, exit, relaunch the app: they're still there. Old scripts from before this update open fine (no data loss).
 48. [ ] **Bookmark button** (top right, when paused) adds a marker at the reading line, same as M.
 
+## v1.1 Remote control (two real devices)
+
+The Simulator can't really test this (Multipeer between simulators is unreliable), so use two physical devices on the same Wi-Fi, e.g. your iPad as the prompter and your iPhone as the remote. Take it slow; one short session is plenty.
+
+49. [ ] **Remote button:** on the script list, the remote icon (top right) opens Remote Control, free, no paywall. The screen stays awake while it's open.
+50. [ ] **Allow Remote (Pro):** on the prompter device, open a script. With Pro off, the Remote button in the bottom panel shows a lock and opens "Remote control of this prompter is Pro". With Pro on (gear > Unlock Pro for testing), tap Remote, then turn on Allow Remote in the popover: a "Waiting" pill and "Remote code 1234" appear top left.
+51. [ ] **Local network prompt:** the first time on each device, iOS asks to use the local network. Tap Allow. (If you tapped Don't Allow: Settings > Steady Prompter > Local Network.)
+52. [ ] **Pair:** on the remote, the prompter's device name shows under Nearby prompters. Tap it, type the code, Connect. Both show "Connected". A wrong code shows a friendly error.
+53. [ ] **Buttons:** Play/Pause (3-2-1 countdown on the prompter), Slower/Faster (speed toast), Back/Forward (chapters or markers; on a script without any, about one screen), Back to Top. The remote shows Playing/Paused, speed and the current chapter.
+54. [ ] **Link drops:** while playing, turn Wi-Fi off on the remote. The prompter keeps scrolling and shows "Disconnected". Turn Wi-Fi back on with the Remote screen open: it reconnects by itself, no code needed.
+55. [ ] **Remembered:** close and reopen Remote Control and the prompter: it reconnects on its own. "Forget paired prompter" makes it ask for the code again.
+56. [ ] **Forget on the prompter:** after pairing, the prompter's bottom panel (paused) shows a red "Forget paired remote" button under the icon row. Tap it: the button disappears, the remote shows "Disconnected", the prompter shows a new code, and the remote must type that new code to reconnect. Also: turning Allow Remote off forgets the remote; turning it back on, the remote needs the code again.
+
+## v1.1 Lens Glass buttons (D1)
+
+Check each on iPhone, iPad and Mac (My Mac (Designed for iPad)), once in Light and once in Dark mode (Settings > Display & Brightness, or System Settings > Appearance on the Mac). Labels never wrap or clip.
+
+57. [ ] **Remote screen look:** on the remote, pair and connect. Title reads "Remote". Navy/white gradient background, device name in big bold, a yellow PAUSED/PLAYING chip, "Speed 3.0" with a gauge icon, and a faint lens ring behind the header.
+58. [ ] **Remote buttons:** a big yellow glowing Play (turns into Pause while playing), navy glass Slower/Faster and Back/Forward with yellow icons and text, and a darker Back to Top. Each press shrinks slightly, darkens and gives a tap haptic, and each still does what it did before (step 53). On the smallest iPhone everything fits without scrolling.
+59. [ ] **Prompter control bar:** open a script, paused. The bottom bar is a rounded card (white in Light, dark navy in Dark) with round Back / yellow Play / Forward, minus and plus speed buttons around a yellow speed slider with the value (e.g. "3.0") on the right, the text-size slider, Mirror, Camera, Colors, and a "Remote" capsule. Back/Forward jump to the previous/next chapter or marker; minus/plus change speed with the "Speed" toast. On iPhone the transport and speed rows stack.
+60. [ ] **Remote popover:** with Pro on, tap Remote: a popover opens with an Allow Remote switch (yellow when on), a line with the device name and the pairing code, and Done. Switch on: the Waiting pill and code appear. Pair the phone: the Remote capsule gets a yellow ring and glow while connected. Switch off: the remote is forgotten (same as step 56). Done closes the popover.
+61. [ ] **Accessibility:** with VoiceOver on, the buttons read "Back", "Play", "Forward", "Slower", "Faster", "Speed", "Text size", "Remote, Allow Remote: on/off", and the switch reads "Allow Remote, On/Off". With Pro off, the Remote capsule shows a lock and still opens the paywall.
+
+## v1.1 Branded look across the app (D1)
+
+Check each on iPhone, iPad and Mac (Designed for iPad), in Light and Dark mode. Also try a large text size (Settings > Accessibility > Display & Text Size > Larger Text): text grows and nothing is cut off.
+
+62. [ ] **Script list:** pale-blue (Light) / navy (Dark) gradient behind the list, each script in a card row with a small navy glass tile, title and "N words · date". Tint (selection, toolbar icons) is navy in Light and yellow in Dark. The toolbar shows the gear, a remote icon (phone with waves) and a filled + button; all still work. Swipe to delete still works.
+63. [ ] **Empty states:** delete all scripts: "No scripts yet" with a glass tile and faint lens ring. On iPad/Mac with no script selected: "Pick a script" in the same style. Dropping a file on either still creates a script.
+64. [ ] **Editor:** title in bold, then yellow chips "N words" and (if any) "N chapters", then the Read time button. Type `# Intro` on a line: that line turns bold and navy (Light) / yellow (Dark) right away; `#Intro` (no space) stays plain. Typing, cursor position, undo and drag-and-drop work as before, and the prompter still shows the chapter.
+65. [ ] **Settings (gear menu) and alerts:** the menu, Restore Purchase alert, "Nothing to Paste" and "Couldn't Import File" alerts use the brand tint and read clearly in both modes.
+66. [ ] **Paywall:** gradient background with a card, glass icon tiles for the header and each feature. "Unlock Pro for $19.99" is a big yellow glass button with dark text, readable in both modes; it dims while busy. Restore Purchase, Privacy Policy and Terms links work. After unlocking, "Pro is unlocked" shows in green.
+67. [ ] **Remote pairing list (iPhone):** gradient background, card rows, glass tile next to each nearby prompter, "Paired"/"Reconnecting…" text readable. Code entry alert and "Forget paired prompter" work as before.
+68. [ ] **Prompter sheets:** Colors, Chapters & Markers and Keyboard Shortcuts sheets show the gradient background behind their rows, in both modes.
+69. [ ] Prompter with a keyboard (Pro): add 2–3 markers with M. Tab jumps to the next marker, Shift-Tab to the previous one. Chapters (#) are skipped. With no markers, Tab shows "No markers yet". At the last marker it shows "Last marker"; Shift-Tab before the first goes to the top. The ⌘/ help lists Tab / Shift-Tab.
+
+## v1.1 Markers from more places
+
+70. [ ] **Editor Add Marker:** open a script in the editor, tap inside a line in the middle of the text, then tap the navy glass "Add Marker" pill next to the word/chapter chips. A "Name Marker" alert opens pre-filled with "Marker N". Save it. A yellow "N markers" chip appears. Tap Add Marker again on the same line: "Already marked" shows briefly and nothing is added.
+71. [ ] **Editor marker in prompter:** press Start. The marked line has the marker bar, it is listed in Chapters & Markers under your name, and Tab (Pro keyboard) jumps to it.
+72. [ ] **Control panel Marker button:** in the prompter, paused, the bottom panel has a bookmark button right after Mirror, Camera and Colors. Tap it: "Marker N added" shows and the Name Marker alert opens. It does exactly what the top bookmark button and M do.
+73. [ ] **Naming while prompting:** while playing, press M (or tap a marker from the remote flow): the marker is added with the toast only, no alert interrupts the read. Paused, M opens the name alert. Cancel keeps the default "Marker N".
+74. [ ] **Rename from the list:** in Chapters & Markers, long-press (or right-click on Mac) a marker: Rename and Delete. Swipe left on a marker: Delete and Rename. Rename changes the title in the list. Clearing the name brings back "Marker N: first words".
+75. [ ] **Upgrade data:** a script that had markers from an earlier build still opens with its markers, shown as "Marker N: …" (no crash, no lost markers).
+76. [ ] **Top buttons contrast:** with Black on White (and any light custom background), the five round buttons at the top right (close, keyboard, list, bookmark, back to top) are dark icons on a light grey circle and clearly visible. On White on Black or with the camera on, they are white icons on a faint circle.
+
+## v1.1 Edit Marker (label + timecode)
+
+82. [ ] **Edit sheet opens everywhere:** open "Edit Marker" from: the pencil on an editor panel row (Mac/iPad), the pencil or swipe "Edit" in the iPhone Markers sheet, long-press "Edit Marker" in the prompter side panel, and swipe "Edit" / long-press "Edit Marker" in Chapters & Markers. Adding a new marker (editor button, control-panel bookmark, top bookmark, or M while paused) also opens it. Tapping a row itself still jumps.
+83. [ ] **Label:** change the label and Save: every list shows the new name. Clear it and Save: it goes back to "Marker N: first words". Cancel changes nothing.
+84. [ ] **Timecode:** type `1:05` and Save: rows show `1:05` right-aligned in even-width digits. `1:02:30` shows as `1:02:30`. `1:75`, `abc` or `1::2` show a red hint and Save is disabled. Clear the field and Save: the timecode is removed.
+85. [ ] **Use estimated time:** tap it: the field fills with the estimate shown on the button (words before the marker at 150 words per minute, same pace as the "~0:37 read" chip). Markers without a timecode show that estimate as grey italic "~0:12" in every list.
+86. [ ] **Delete in the sheet:** Delete Marker removes it from all lists and its timecode is gone (re-adding a marker on that line starts with no timecode or name).
+87. [ ] **Old data:** scripts from earlier builds open with markers intact and no timecodes (estimates shown).
+
+## v1.1 Remote look and markers on the remote
+
+Needs both devices on this build (Pro on the prompter, Allow Remote on).
+
+88. [ ] **Remote look, Dark (default):** with the iPhone in Light mode, open Remote. "Looking for prompters…", the nearby list, the code alert and the connected pad all show the navy gradient with white text and yellow icons/accents.
+89. [ ] **Look toggle:** tap the sun button next to the status pill: everything switches to the light look (pale-blue background, navy text, yellow accents, dark icons on the buttons) in every state, including the code alert and the Markers sheet. Tap the moon to go back. Close and reopen Remote: the choice is remembered. Changing the system appearance doesn't change it.
+90. [ ] **Add Marker from the remote:** connected, tap Marker (while paused and while playing). The prompter shows "Marker N added" and no edit sheet opens on the prompter. The Markers count on the remote goes up within about a second.
+91. [ ] **Prev / Next:** with 2+ markers, Next and Prev on the remote jump the reading line like Tab / Shift-Tab (chapters skipped; "Last marker" at the end).
+92. [ ] **Remote markers list:** tap "Markers (N)": each marker shows its name and timecode on the right (set timecode in bold digits, or the estimate as grey italic "~0:12"). The current one is highlighted. Tap a row: the prompter jumps there and the highlight follows. Rename/timecode changes made on the prompter show up within about a second.
+93. [ ] **Mixed versions:** an older prompter build still works with the new remote's Play/Speed/Back/Forward buttons; Markers says "Update the app on the prompter to see markers here".
+94. [ ] **Fit:** on the smallest iPhone, the connected pad (Play, Slower/Faster, Back/Forward, Prev/Marker/Next, Markers/Top) fits without scrolling in both looks.
+
+## v1.1 Remote markers fix
+
+95. [ ] **Markers sheet always opens:** connected, tap "Markers (N)": the sheet opens every time. With no markers it says "No markers yet". If the prompter runs an older build it says the prompter isn't sending markers and to update it (also shown if you tap Prev/Marker/Next in that case).
+96. [ ] **List right after connecting:** with markers already in the script, connect the remote: "Markers (N)" shows the right count within a second, without touching anything on the prompter.
+97. [ ] **Instant updates:** add, rename, retime or delete a marker on the prompter: the remote list updates right away.
+98. [ ] **Debug log (Xcode console, Debug builds only):** tapping Marker on the phone logs "[Remote] sent marker(...)", and the prompter's console logs "[Remote host] received marker(...)" and "[Remote host] sent state, markers: N". "markers: -1" on the phone means the prompter build is old.
+
+## v1.1 Navigate and edit from the remote
+
+Both devices on this build; the prompter paused unless a step says otherwise. Check in both remote looks (sun/moon).
+
+99. [ ] **Navigate button:** on the remote pad, tap Navigate: a full-screen panel with a big glass strip and Line Up / Line Down / Page Up / Page Down. Drag a finger up on the strip: the prompter text moves down through the script smoothly and keeps up with your finger; drag down to go back. It stops at the top and the end.
+100. [ ] **Line / Page:** Line Up/Down move about one line, Page Up/Down about most of a screen, and the remote's current marker follows.
+101. [ ] **Paused only:** start playing from the remote: Navigate and Edit Script grey out with "Pause to navigate or edit the script". If the Navigate panel is open, a yellow banner says the prompter is playing and the controls are disabled. A nav command that arrives while playing shows "Pause to move through the script" on the prompter and does nothing.
+102. [ ] **Edit Script:** tap Edit Script: "Loading script…" then the full text in an editor. Change a word and Save: the remote closes the editor, the prompter shows "Script updated from remote", the new text appears near the same spot, and the list/markers update on the remote.
+103. [ ] **Markers survive edits:** with markers after the edited spot, they still sit on the same lines (with their names and timecodes). Deleting a whole marked paragraph moves that marker to the start of the change (two on one line merge into one).
+104. [ ] **Conflict:** open Edit Script on the remote, then change the script on the prompter (or add text via another edit). Save on the remote: "Script changed on the prompter" with Reload / Keep Editing. Reload loads the latest text.
+105. [ ] **Playing while editing:** with the editor open, start playing on the prompter: a banner appears and Save is disabled until it's paused again. Cancel never changes the script.
+106. [ ] **No answer:** with an older prompter build, Save shows "No answer from the prompter…" after about 5 seconds instead of spinning forever.
+
 ## iPhone layout (compact width / compact height)
 
-49. [ ] **iPhone portrait, editor:** word count and chapter count show in full (no "93 w…"). "Read time" (or "~N min read" on Pro) sits on its own line below, on one line.
-50. [ ] **iPad and Mac editor:** unchanged. Read time stays at the right of the same row.
-51. [ ] **iPhone portrait, prompter paused:** top row shows Close (left) and Chapters/Markers, Add Marker and "…" (right), all below the Dynamic Island. "…" opens Back to Top and Keyboard Shortcuts.
-52. [ ] **iPhone portrait:** the control panel fits with margins on both sides and above the home indicator; speed and size sliders, Mirror, Camera, Colors and Play are all visible.
-53. [ ] **iPhone landscape, paused:** top row and control panel stay clear of the camera housing side and the home indicator; nothing overlaps or is cut off. Rotate back and forth: layout switches cleanly. Press play: controls hide as before.
-54. [ ] **iPad (both orientations) and Mac:** prompter top buttons and control panel look exactly as before.
+107. iPhone portrait, script editor: the toolbar row shows word count, markers chip and an icon-only Add Marker (bookmark) button. "Read time" (or "~N min read" on Pro) sits on its own line below, on one line, never as a vertical column of letters.
+108. iPad and Mac editor: unchanged. Add Marker keeps its label and Read time stays at the right of the same row.
+109. iPhone portrait, prompter paused: the top row shows Close (left) and Chapters/Markers list, Add Marker, and a "…" button (right), all fully visible below the Dynamic Island. "…" opens Back to Top and Keyboard Shortcuts.
+110. iPhone portrait: the bottom control panel fits inside the screen with margins on both sides and above the home indicator. Speed row shows −, slider, value (e.g. 3.0) and + all visible. Remote is an icon-only button at the right of the tool row (with lock on Free) and opens the Remote panel / paywall.
+111. iPhone portrait: no marker rail on the right edge. Tap the list button to see and jump to markers.
+112. iPhone landscape, prompter paused (script with markers): the Markers panel sits to the right of the control panel, never on top of it. +, speed value and Remote are all visible and tappable. Nothing is under the camera housing side.
+113. iPhone landscape: "…" > Hide Markers Panel hides it; Show Markers Panel brings it back. Tapping a marker in the panel jumps to it.
+114. Rotate portrait ↔ landscape while paused: layout switches cleanly, no clipping. Press play: all controls hide as before.
+115. iPad (portrait and landscape) and Mac (Designed for iPad): prompter top buttons, control panel, Remote button label and marker rail look exactly as before.
+116. [ ] **Editor chips never truncate:** on iPhone portrait and iPad narrow Split View, the words / chapters / markers chips show their full text (e.g. "93 words", "1 marker"), never "93 w…" or "1 mar…".

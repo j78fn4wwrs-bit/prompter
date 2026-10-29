@@ -14,31 +14,25 @@ struct ScriptListView: View {
     @State private var showImporter = false
     @State private var importError: String?
     @State private var pasteError: String?
+    @State private var showRemote = false
 
     var body: some View {
         NavigationSplitView {
             Group {
                 if scripts.isEmpty {
-                    ContentUnavailableView {
-                        Label("No scripts yet", systemImage: "text.alignleft")
-                    } description: {
-                        Text("Tap + to write, paste or import a script.")
-                    }
+                    LensGlassEmptyState(title: "No scripts yet", systemImage: "text.alignleft",
+                                        message: "Tap + to write, paste or import a script.")
                 } else {
                     List(selection: $selection) {
                         ForEach(scripts) { script in
                             NavigationLink(value: script) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(script.title.isEmpty ? "Untitled" : script.title)
-                                        .font(.headline)
-                                    Text("\(script.wordCount) words · \(script.updatedAt.formatted(date: .abbreviated, time: .shortened))")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                                ScriptRow(script: script)
                             }
+                            .listRowBackground(LensGlassColor.card)
                         }
                         .onDelete(perform: delete)
                     }
+                    .scrollContentBackground(.hidden)
                 }
             }
             .background {
@@ -59,6 +53,7 @@ struct ScriptListView: View {
             .onDrop(of: DropImporter.acceptedTypes, isTargeted: nil) { providers in
                 handleDrop(providers)
             }
+            .background(LensGlassBackground())
             .navigationTitle("Steady Prompter")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -83,6 +78,12 @@ struct ScriptListView: View {
                     .accessibilityLabel("Settings")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button { showRemote = true } label: {
+                        Label("Remote Control", systemImage: "iphone.radiowaves.left.and.right")
+                    }
+                    .accessibilityLabel("Remote Control")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button { newScript(text: "") } label: {
                             Label("New Script", systemImage: "square.and.pencil")
@@ -94,22 +95,24 @@ struct ScriptListView: View {
                             Label("Import File (Text, PDF, Word, Pages)", systemImage: "doc.text")
                         }
                     } label: {
-                        Image(systemName: "plus")
+                        Image(systemName: "plus.circle.fill")
                     }
+                    .accessibilityLabel("Add Script")
                 }
             }
             .onAppear(perform: seedIfNeeded)
+            .fullScreenCover(isPresented: $showRemote) {
+                RemoteControlView()
+            }
             .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 420)
         } detail: {
             if let selection {
                 ScriptEditorView(script: selection, onFileDrop: { providers in _ = handleDrop(providers) })
                     .id(selection.persistentModelID)
             } else {
-                ContentUnavailableView {
-                    Label("Pick a script", systemImage: "text.alignleft")
-                } description: {
-                    Text("Choose a script on the left, tap + to write a new one, or drop a file here.")
-                }
+                LensGlassEmptyState(title: "Pick a script", systemImage: "text.alignleft",
+                                    message: "Choose a script on the left, tap + to write a new one, or drop a file here.")
+                .background(LensGlassBackground())
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .onDrop(of: DropImporter.acceptedTypes, isTargeted: nil) { providers in
@@ -223,5 +226,25 @@ struct ScriptListView: View {
             if selection == scripts[index] { selection = nil }
             context.delete(scripts[index])
         }
+    }
+}
+
+/// One script in the list: glass tile, title and meta line.
+private struct ScriptRow: View {
+    let script: Script
+
+    var body: some View {
+        HStack(spacing: 12) {
+            LensGlassIconTile(systemName: "text.alignleft")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(script.title.isEmpty ? "Untitled" : script.title)
+                    .font(.headline)
+                    .foregroundStyle(LensGlassColor.label)
+                Text("\(script.wordCount) words · \(script.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(LensGlassColor.secondaryLabel)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

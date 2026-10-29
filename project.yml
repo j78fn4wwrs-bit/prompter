@@ -5,6 +5,8 @@ options:
     iOS: "18.0"
   createIntermediateGroups: true
   xcodeVersion: "26.0"
+  # Xcode's view debugger crashes "Designed for iPad" Mac runs (AddressBook symbol), so keep it off in the scheme.
+  postGenCommand: perl -0pi -e 's/<LaunchAction(?![^>]*viewDebuggingEnabled)/<LaunchAction\n      viewDebuggingEnabled = "No"/' Prompter.xcodeproj/xcshareddata/xcschemes/Prompter.xcscheme
   # Schemes live in Prompter.xcodeproj/xcshareddata/xcschemes, so this
   # prefix resolves Products.storekit at the project root.
   schemePathPrefix: "../../"

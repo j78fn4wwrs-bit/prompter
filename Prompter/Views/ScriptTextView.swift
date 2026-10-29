@@ -7,6 +7,10 @@ import UIKit
 struct ScriptTextView: UIViewRepresentable {
     @Binding var text: String
     var onFileDrop: ([NSItemProvider]) -> Void
+    /// Cursor position as a Character offset into `text` (same units as Script.markerOffsets).
+    var onCursorChange: (Int) -> Void = { _ in }
+    /// Set to a Character offset to move the cursor there and scroll it into view; reset to nil after.
+    var jumpTo: Binding<Int?> = .constant(nil)
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -19,6 +23,8 @@ struct ScriptTextView: UIViewRepresentable {
         tv.alwaysBounceVertical = true
         tv.keyboardDismissMode = .interactive
         tv.text = text
+        tv.tintColor = UIColor(named: "SPAccent")
+        ScriptTextView.styleHeadings(in: tv)
         tv.delegate = context.coordinator
         // Remove UITextView's own drop interaction and use ours.
         for interaction in tv.interactions where interaction is UIDropInteraction {
@@ -36,7 +42,51 @@ struct ScriptTextView: UIViewRepresentable {
             tv.text = text
             let len = (text as NSString).length
             tv.selectedRange = NSRange(location: min(selected.location, len), length: 0)
+            ScriptTextView.styleHeadings(in: tv)
         }
+        if let target = jumpTo.wrappedValue {
+            let clamped = min(max(target, 0), text.count)
+            let index = text.index(text.startIndex, offsetBy: clamped)
+            let location = NSRange(index..<index, in: text).location
+            let range = NSRange(location: min(location, (tv.text as NSString).length), length: 0)
+            tv.selectedRange = range
+            tv.scrollRangeToVisible(range)
+            let binding = jumpTo
+            DispatchQueue.main.async { binding.wrappedValue = nil }
+        }
+    }
+
+    /// Same rule as ScriptOutline: up to six #, then a space or the end of the line.
+    private static func isHeading(_ line: String) -> Bool {
+        let trimmed = line.drop(while: { $0 == " " })
+        let hashes = trimmed.prefix(while: { $0 == "#" }).count
+        guard hashes > 0, hashes <= 6 else { return false }
+        let rest = trimmed.dropFirst(hashes)
+        return rest.isEmpty || rest.first == " "
+    }
+
+    /// Colors "# Chapter" lines in the brand accent and makes them bold. Only attributes change,
+    /// never the characters, so the cursor, undo and the saved text are untouched.
+    @MainActor
+    static func styleHeadings(in tv: UITextView) {
+        guard tv.markedTextRange == nil else { return }
+        let storage = tv.textStorage
+        let full = NSRange(location: 0, length: storage.length)
+        let body = UIFont.preferredFont(forTextStyle: .body)
+        let headingFont = UIFont.systemFont(ofSize: body.pointSize * 1.1, weight: .bold)
+        let accent = UIColor(named: "SPAccent") ?? .systemBlue
+        let ns = storage.string as NSString
+        storage.beginEditing()
+        storage.addAttribute(.font, value: body, range: full)
+        storage.addAttribute(.foregroundColor, value: UIColor.label, range: full)
+        ns.enumerateSubstrings(in: full, options: [.byLines, .substringNotRequired]) { _, lineRange, _, _ in
+            if isHeading(ns.substring(with: lineRange)) {
+                storage.addAttribute(.font, value: headingFont, range: lineRange)
+                storage.addAttribute(.foregroundColor, value: accent, range: lineRange)
+            }
+        }
+        storage.endEditing()
+        tv.typingAttributes = [.font: body, .foregroundColor: UIColor.label]
     }
 
     final class Coordinator: NSObject, UITextViewDelegate, UIDropInteractionDelegate {
@@ -46,7 +96,17 @@ struct ScriptTextView: UIViewRepresentable {
         init(_ parent: ScriptTextView) { self.parent = parent }
 
         func textViewDidChange(_ textView: UITextView) {
+            ScriptTextView.styleHeadings(in: textView)
             parent.text = textView.text
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            // selectedRange is in UTF-16 units; markers use Character offsets.
+            let ns = textView.text as NSString
+            let location = min(textView.selectedRange.location, ns.length)
+            let offset = ns.substring(to: location).count
+            let callback = parent.onCursorChange
+            DispatchQueue.main.async { callback(offset) }
         }
 
         // MARK: Drop
