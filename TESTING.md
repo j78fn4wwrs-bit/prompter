@@ -178,3 +178,4 @@ Both devices on this build; the prompter paused unless a step says otherwise. Ch
 113. iPhone landscape: "…" > Hide Markers Panel hides it; Show Markers Panel brings it back. Tapping a marker in the panel jumps to it.
 114. Rotate portrait ↔ landscape while paused: layout switches cleanly, no clipping. Press play: all controls hide as before.
 115. iPad (portrait and landscape) and Mac (Designed for iPad): prompter top buttons, control panel, Remote button label and marker rail look exactly as before.
+116. [ ] **Editor chips never truncate:** on iPhone portrait and iPad narrow Split View, the words / chapters / markers chips show their full text (e.g. "93 words", "1 marker"), never "93 w…" or "1 mar…".

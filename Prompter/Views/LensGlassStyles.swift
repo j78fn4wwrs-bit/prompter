@@ -287,5 +287,7 @@ struct LensGlassChip: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background(LensGlassColor.yellow.opacity(0.3), in: Capsule())
+        // Never truncate a chip ("93 w…"): chips keep their full width.
+        .fixedSize()
     }
 }

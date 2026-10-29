@@ -62,9 +62,10 @@ struct ScriptEditorView: View {
                 .fixedSize()
                 .accessibilityLabel("Add marker at cursor")
                 if let markerNote {
+                    // The transient note is the one item allowed to shorten if space runs out.
                     Text(markerNote).foregroundStyle(LensGlassColor.secondaryLabel)
                         .lineLimit(1)
-                        .fixedSize()
+                        .truncationMode(.tail)
                 }
                 Spacer(minLength: 0)
                 if isWide { readTimeButton }
