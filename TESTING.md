@@ -79,3 +79,12 @@ Tap + > **Import File**. The title should be the file name; errors show in an al
 46. [ ] **Chapters list:** the list button (top right in the prompter) shows Top, headings and markers with numbers 1–9. Tapping one scrolls smoothly there. Swipe a marker to delete it.
 47. [ ] **Markers persist:** add markers, exit, relaunch the app: they're still there. Old scripts from before this update open fine (no data loss).
 48. [ ] **Bookmark button** (top right, when paused) adds a marker at the reading line, same as M.
+
+## iPhone layout (compact width / compact height)
+
+49. [ ] **iPhone portrait, editor:** word count and chapter count show in full (no "93 w…"). "Read time" (or "~N min read" on Pro) sits on its own line below, on one line.
+50. [ ] **iPad and Mac editor:** unchanged. Read time stays at the right of the same row.
+51. [ ] **iPhone portrait, prompter paused:** top row shows Close (left) and Chapters/Markers, Add Marker and "…" (right), all below the Dynamic Island. "…" opens Back to Top and Keyboard Shortcuts.
+52. [ ] **iPhone portrait:** the control panel fits with margins on both sides and above the home indicator; speed and size sliders, Mirror, Camera, Colors and Play are all visible.
+53. [ ] **iPhone landscape, paused:** top row and control panel stay clear of the camera housing side and the home indicator; nothing overlaps or is cut off. Rotate back and forth: layout switches cleanly. Press play: controls hide as before.
+54. [ ] **iPad (both orientations) and Mac:** prompter top buttons and control panel look exactly as before.

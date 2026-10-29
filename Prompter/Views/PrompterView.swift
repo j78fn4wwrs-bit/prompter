@@ -30,6 +30,8 @@ struct PrompterView: View {
     @State private var hudTask: Task<Void, Never>?
     @State private var viewWidth: CGFloat = 400
     @FocusState private var keyboardFocused: Bool
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     /// Only used for the reading-line arrow, not for text size.
     @State private var layoutScale: CGFloat = 1
 
@@ -43,6 +45,10 @@ struct PrompterView: View {
     // line by line so no single layer gets huge.
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    /// iPhone-style layout: compact width (portrait) or compact height (landscape).
+    /// iPad and Mac are regular/regular, so they keep the original layout.
+    private var isCompactLayout: Bool { horizontalSizeClass == .compact || verticalSizeClass == .compact }
+    private var showsControls: Bool { showControls && !engine.isPlaying && countdown == nil }
     private var fontRange: ClosedRange<Double> {
         let base: ClosedRange<Double> = isPad ? 24...120 : 20...80
         // Keep ~6+ average characters per line even in Slide Over / narrow windows.
@@ -102,7 +108,7 @@ struct PrompterView: View {
                         .id(countdown)
                         .allowsHitTesting(false)
                 }
-                if showControls && !engine.isPlaying && countdown == nil {
+                if showsControls && !isCompactLayout {
                     controls
                 }
                 if let hud {
@@ -122,6 +128,14 @@ struct PrompterView: View {
             }
         }
         .ignoresSafeArea()
+        // iPhone: controls sit in an overlay that respects the safe area (Dynamic Island,
+        // home indicator, landscape notch side), so nothing is cut off at the edges.
+        .overlay {
+            if showsControls && isCompactLayout {
+                compactControls
+                    .transition(.opacity)
+            }
+        }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .background { commandShortcuts }
@@ -303,57 +317,118 @@ struct PrompterView: View {
                     .background(.black.opacity(0.6), in: Capsule())
             }
 
-            VStack(spacing: 14) {
-                HStack {
-                    Image(systemName: "tortoise.fill")
-                    Slider(value: $speed, in: 10...300)
-                    Image(systemName: "hare.fill")
-                }
-                HStack {
-                    Image(systemName: "textformat.size.smaller")
-                    // Left = smaller, right = bigger. The value is the point size.
-                    Slider(value: fontBinding, in: fontRange)
-                    Image(systemName: "textformat.size.larger")
-                }
-                HStack(spacing: 22) {
-                    Toggle(isOn: $mirror) {
-                        Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
-                    }
-                    .toggleStyle(.button)
-                    .accessibilityLabel("Mirror")
+            controlPanel
+                .padding(.horizontal, 12)
+                .padding(.bottom, 30)
+        }
+    }
 
-                    proButton(icon: cameraMode ? "video.fill" : "video", active: cameraMode, feature: .camera) {
-                        cameraMode.toggle()
-                        if cameraMode { camera.prepare() } else { camera.stopSession() }
-                    }
-                    .accessibilityLabel("Camera")
-                    // Colors: basic presets are free, custom colors are Pro (inside the sheet).
-                    Button { showColors = true } label: {
-                        Image(systemName: "paintpalette")
-                    }
-                    .accessibilityLabel("Colors")
-
-                    Spacer()
-
-                    Button { togglePlay() } label: {
-                        Image(systemName: cameraMode ? "record.circle" : "play.circle.fill")
-                            .font(.system(size: 44))
-                            .foregroundStyle(cameraMode ? Color.red : Color.white)
-                    }
+    /// Speed, size, tools and play. Shared by the iPad/Mac layout and the iPhone layout.
+    private var controlPanel: some View {
+        VStack(spacing: isCompactLayout ? 10 : 14) {
+            HStack {
+                Image(systemName: "tortoise.fill")
+                Slider(value: $speed, in: 10...300)
+                Image(systemName: "hare.fill")
+            }
+            HStack {
+                Image(systemName: "textformat.size.smaller")
+                // Left = smaller, right = bigger. The value is the point size.
+                Slider(value: fontBinding, in: fontRange)
+                Image(systemName: "textformat.size.larger")
+            }
+            HStack(spacing: 22) {
+                Toggle(isOn: $mirror) {
+                    Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
                 }
-                .font(.title2)
+                .toggleStyle(.button)
+                .accessibilityLabel("Mirror")
+
+                proButton(icon: cameraMode ? "video.fill" : "video", active: cameraMode, feature: .camera) {
+                    cameraMode.toggle()
+                    if cameraMode { camera.prepare() } else { camera.stopSession() }
+                }
+                .accessibilityLabel("Camera")
+                // Colors: basic presets are free, custom colors are Pro (inside the sheet).
+                Button { showColors = true } label: {
+                    Image(systemName: "paintpalette")
+                }
+                .accessibilityLabel("Colors")
+
+                Spacer()
+
+                Button { togglePlay() } label: {
+                    Image(systemName: cameraMode ? "record.circle" : "play.circle.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(cameraMode ? Color.red : Color.white)
+                }
+            }
+            .font(.title2)
+            if !isCompactLayout {
                 Text("Tap anywhere to start or pause. Drag to move. ⌘/ for keyboard shortcuts.")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.7))
             }
-            .tint(.white)
+        }
+        .tint(.white)
+        .foregroundStyle(.white)
+        .padding(isCompactLayout ? 12 : 16)
+        .frame(maxWidth: 640)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .environment(\.colorScheme, .dark)
+    }
+
+    // MARK: iPhone (compact) layout
+
+    /// iPhone controls, laid out inside the safe area. The top row keeps Close, Chapters & Markers
+    /// and Add Marker visible; Back to Top and Keyboard Shortcuts live in a "…" menu.
+    private var compactControls: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 4) {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").padding(10)
+                }
+                .accessibilityLabel("Close")
+                Spacer(minLength: 0)
+                Button { showChapters = true } label: {
+                    Image(systemName: "list.bullet").padding(10)
+                }
+                .accessibilityLabel("Chapters and markers")
+                Button { addMarker() } label: {
+                    Image(systemName: "bookmark").padding(10)
+                }
+                .accessibilityLabel("Add marker here")
+                Menu {
+                    Button { engine.reset(); flash("Top") } label: {
+                        Label("Back to Top", systemImage: "backward.end.fill")
+                    }
+                    Button { showHelp = true } label: {
+                        Label("Keyboard Shortcuts", systemImage: "keyboard")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle").padding(10)
+                }
+                .accessibilityLabel("More")
+            }
+            .font(.title3.bold())
             .foregroundStyle(.white)
-            .padding(16)
-            .frame(maxWidth: 640)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-            .environment(\.colorScheme, .dark)
             .padding(.horizontal, 12)
-            .padding(.bottom, 30)
+            .padding(.top, 4)
+
+            Spacer(minLength: 0)
+                .allowsHitTesting(false)
+
+            if let message = camera.statusMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.white)
+                    .padding(8)
+                    .background(.black.opacity(0.6), in: Capsule())
+            }
+
+            controlPanel
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
         }
     }
 

@@ -9,6 +9,9 @@ struct ScriptEditorView: View {
     @State private var showPrompter = false
     @State private var paywallFeature: ProFeature?
     @AppStorage(PrefKey.speed) private var speed: Double = 60
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// iPad/Mac: Read time stays on the same row. iPhone: it gets its own line.
+    private var isWide: Bool { horizontalSizeClass != .compact }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,26 +21,32 @@ struct ScriptEditorView: View {
                 .padding(.top, 8)
             HStack {
                 Text("\(script.wordCount) words")
+                    .lineLimit(1)
+                    .fixedSize()
                 let chapters = ScriptOutline.lines(script.text).filter { $0.headingLevel > 0 }.count
                 if chapters > 0 {
                     Text("· \(chapters) chapter\(chapters == 1 ? "" : "s")")
+                        .lineLimit(1)
+                        .fixedSize()
                 }
-                Spacer()
-                Button {
-                    if !store.isPro { paywallFeature = .readTime }
-                } label: {
-                    if store.isPro {
-                        Label("~\(script.readTime()) read", systemImage: "clock")
-                    } else {
-                        Label("Read time", systemImage: "lock.fill")
-                    }
-                }
-                .buttonStyle(.borderless)
+                Spacer(minLength: 0)
+                if isWide { readTimeButton }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
             .padding(.horizontal)
             .padding(.vertical, 6)
+            if !isWide {
+                // iPhone: Read time gets its own line so nothing truncates or wraps.
+                HStack {
+                    readTimeButton
+                    Spacer(minLength: 0)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+                .padding(.bottom, 6)
+            }
             Divider()
             ScriptTextView(text: $script.text, onFileDrop: onFileDrop)
                 .padding(.horizontal, 12)
@@ -69,5 +78,20 @@ struct ScriptEditorView: View {
             onFileDrop(providers)
             return true
         }
+    }
+
+    private var readTimeButton: some View {
+        Button {
+            if !store.isPro { paywallFeature = .readTime }
+        } label: {
+            if store.isPro {
+                Label("~\(script.readTime()) read", systemImage: "clock")
+            } else {
+                Label("Read time", systemImage: "lock.fill")
+            }
+        }
+        .buttonStyle(.borderless)
+        .lineLimit(1)
+        .fixedSize()
     }
 }
